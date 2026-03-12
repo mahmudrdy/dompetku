@@ -1,0 +1,17 @@
+{
+  "name": "Dompetku",
+  "short_name": "Dompetku",
+  "description": "Aplikasi pencatat keuangan pribadi",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#3b82f6",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
