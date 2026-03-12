@@ -26,6 +26,7 @@ const db = getFirestore(app);
 // State Management
 let transactions = [];
 let monthlyBudget = 300000;
+let userName = "Pengguna";
 let isBalanceVisible = localStorage.getItem('dompetku_visibility') !== 'false'; // default true
 let isLoggedIn = false;
 
@@ -51,6 +52,8 @@ const form = document.getElementById('transactionForm');
 const settingsForm = document.getElementById('settingsForm');
 const amountInput = document.getElementById('amount');
 const budgetInput = document.getElementById('budgetInput');
+const userNameInput = document.getElementById('userNameInput');
+const userNameDisplay = document.getElementById('userNameDisplay');
 const submitBtn = document.getElementById('submitBtn');
 
 // View & Stats Elements
@@ -95,6 +98,17 @@ function executeLogin() {
 }
 
 function loadDataFromFirebase() {
+    // Listen to user profile
+    const profileDoc = doc(db, "settings", "profile");
+    onSnapshot(profileDoc, (docSnap) => {
+        if (docSnap.exists() && docSnap.data().name) {
+            userName = docSnap.data().name;
+        } else {
+            setDoc(profileDoc, { name: "Pengguna" });
+        }
+        if (userNameDisplay) userNameDisplay.textContent = `Halo, ${userName}! 👋`;
+    });
+
     // Listen to budget changes
     const budgetDoc = doc(db, "settings", "budget");
     unsubBudget = onSnapshot(budgetDoc, (docSnap) => {
@@ -411,19 +425,22 @@ window.closeModal = () => {
 window.openSettings = () => {
     settingsModal.classList.remove('modal-hidden');
     budgetInput.value = formatRupiahInput(monthlyBudget.toString());
+    userNameInput.value = userName;
 };
 
 window.closeSettings = () => {
     settingsModal.classList.add('modal-hidden');
 };
 
-// Expose safeBudget
-window.saveBudget = async (newBudget) => {
-    // UI update gets triggered by onSnapshot automatically
+// Expose saveSettings
+window.saveSettings = async (newBudget, newName) => {
     try {
         await setDoc(doc(db, "settings", "budget"), { amount: newBudget });
+        if(newName) {
+            await setDoc(doc(db, "settings", "profile"), { name: newName });
+        }
     } catch(err) {
-        console.error("Error setting budget:", err);
+        console.error("Error setting settings:", err);
     }
 };
 
@@ -529,13 +546,14 @@ settingsForm.addEventListener('submit', (e) => {
     e.preventDefault();
     const rawAmount = budgetInput.value.replace(/\./g, '').replace(/,/g, '');
     const amount = parseFloat(rawAmount);
+    const newName = userNameInput.value.trim();
 
     if (isNaN(amount) || amount < 0) {
         alert('Masukkan nominal yang valid');
         return;
     }
 
-    window.saveBudget(amount);
+    window.saveSettings(amount, newName);
     closeSettings();
 });
 

@@ -140,6 +140,7 @@
     <header id="homeHeader" class="pt-8 pb-4 px-6 bg-white sticky top-0 z-10 glass-card transition-all duration-300">
         <div class="flex justify-between items-center mb-6">
             <div>
+                <p class="text-[13px] font-semibold text-slate-800 mb-1" id="userNameDisplay">Halo, Pengguna! 👋</p>
                 <div class="flex items-center gap-2">
                     <p class="text-sm font-medium text-slate-500">Total Saldo</p>
                     <button id="toggleVisibility" onclick="toggleBalanceVisibility()" class="text-slate-400 hover:text-blue-500 transition-colors p-1 rounded-full active:bg-slate-100 flex items-center justify-center cursor-pointer">
@@ -435,6 +436,12 @@
             
             <form id="settingsForm" class="space-y-4">
                 
+                <!-- User Name -->
+                <div>
+                    <label class="block text-sm font-medium text-slate-600 mb-1.5">Nama Panggilan</label>
+                    <input type="text" id="userNameInput" required placeholder="Masukkan nama Anda..." class="block w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:bg-white outline-none transition-all">
+                </div>
+
                 <!-- Budget Amount -->
                 <div>
                     <label class="block text-sm font-medium text-slate-600 mb-1.5">Batas Pengeluaran Sehari-hari / Bulan (Rp)</label>
