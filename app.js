@@ -51,6 +51,11 @@ let state = {
         budgetStartDate: "", // Will be "YYYY-MM"
         isLoggedIn: false
     },
+    detail: {
+        account: 'tabungan',
+        currentDate: new Date() // For month filtering
+    },
+    currentView: 'home',
     balances: {
         tabungan: 0,
         keperluan: 0
@@ -63,8 +68,13 @@ let state = {
 
 const COLLECTIONS = {
     TRANSACTIONS: "transactions",
-    USER: "user_data"
+    USER: "users"
 };
+
+const MONTH_NAMES = [
+    "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+    "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+];
 
 // --- INITIALIZATION ---
 async function init() {
@@ -399,6 +409,7 @@ function renderApp() {
 
         renderTransactions();
         updateStats();
+        if (state.currentView === 'bukuDetail') renderBukuDetail();
     } catch (e) {
         console.error("Dompetku: Render Error:", e);
         // Alert but only if it's the first time to avoid loops
@@ -507,7 +518,14 @@ function renderTransactions() {
     const list = document.getElementById('transactionList');
     const emptyState = document.getElementById('emptyState');
     
-    if (state.transactions.length === 0) {
+    // Filter for current month only on Home screen
+    const now = new Date();
+    const currentMonthTransactions = state.transactions.filter(tx => {
+        const txDate = new Date(tx.date);
+        return txDate.getMonth() === now.getMonth() && txDate.getFullYear() === now.getFullYear();
+    });
+
+    if (currentMonthTransactions.length === 0) {
         emptyState.classList.remove('hidden');
         list.querySelectorAll('.transaction-item').forEach(el => el.remove());
         return;
@@ -515,19 +533,18 @@ function renderTransactions() {
 
     emptyState.classList.add('hidden');
     
-    // Clear current list items except empty state
+    // Clear current list items
     list.querySelectorAll('.transaction-item').forEach(el => el.remove());
 
-    state.transactions.forEach(tx => {
+    currentMonthTransactions.forEach(tx => {
         const item = document.createElement('div');
-        item.className = 'transaction-item flex justify-between items-center p-4 bg-white rounded-2xl border border-slate-100 shadow-sm';
+        item.className = 'transaction-item flex justify-between items-center p-4 bg-white rounded-2xl border border-slate-100 shadow-sm transition-all hover:bg-slate-50';
         
         const isIncome = tx.type === 'income';
         const colorClass = isIncome ? 'text-blue-600' : 'text-red-500';
         const bgClass = isIncome ? 'bg-blue-50' : 'bg-red-50';
         const iconClass = tx.account === 'tabungan' ? 'ph ph-piggy-bank' : 'ph ph-wallet';
         
-        // Securing against XSS by using separate elements for user-generated content
         const leftSide = document.createElement('div');
         leftSide.className = 'flex items-center gap-3';
         leftSide.innerHTML = `
@@ -539,16 +556,13 @@ function renderTransactions() {
                 <p class="text-[11px] text-slate-400 capitalize">${tx.account} • ${new Date(tx.date).toLocaleDateString('id-ID')}</p>
             </div>
         `;
-        // Safe injection
         leftSide.querySelector('.desc-text').textContent = tx.description;
 
         const rightSide = document.createElement('div');
         rightSide.className = 'text-right';
         rightSide.innerHTML = `
             <p class="text-sm font-bold ${colorClass}">${isIncome ? '+' : '-'}${formatCurrency(tx.amount)}</p>
-            <button class="text-[10px] text-slate-300 hover:text-red-400 transition-colors btn-delete">Hapus</button>
         `;
-        rightSide.querySelector('.btn-delete').onclick = () => deleteTransaction(tx.id);
 
         item.appendChild(leftSide);
         item.appendChild(rightSide);
@@ -569,28 +583,108 @@ window.deleteTransaction = async function(id) {
 
 // --- VIEW NAVIGATION ---
 window.switchView = function(view) {
-    const views = ['home', 'stats', 'buku'];
+    state.currentView = view;
+    const views = ['home', 'stats', 'buku', 'bukuDetail'];
     views.forEach(v => {
         const header = document.getElementById(`${v}Header`);
         const main = document.getElementById(`${v}Main`);
-        const nav = document.getElementById(`nav${v.charAt(0).toUpperCase() + v.slice(1)}`);
-        const icon = document.getElementById(`icon${v.charAt(0).toUpperCase() + v.slice(1)}`);
+        
+        // Navigation bar highlighting (only for main 3 views)
+        const navItems = ['Home', 'Stats', 'Buku'];
+        if (navItems.includes(v.charAt(0).toUpperCase() + v.slice(1))) {
+            const nav = document.getElementById(`nav${v.charAt(0).toUpperCase() + v.slice(1)}`);
+            const icon = document.getElementById(`icon${v.charAt(0).toUpperCase() + v.slice(1)}`);
+            
+            if (v === view) {
+                nav.classList.replace('text-slate-400', 'text-blue-600');
+                if (icon) icon.classList.replace('ph', 'ph-fill');
+            } else {
+                nav.classList.replace('text-blue-600', 'text-slate-400');
+                if (icon) icon.classList.replace('ph-fill', 'ph');
+            }
+        }
 
         if (v === view) {
             header.classList.remove('hidden');
             main.classList.remove('hidden');
-            nav.classList.replace('text-slate-400', 'text-blue-600');
-            if (icon) icon.classList.replace('ph', 'ph-fill');
         } else {
             header.classList.add('hidden');
             main.classList.add('hidden');
-            nav.classList.replace('text-blue-600', 'text-slate-400');
-            if (icon) icon.classList.replace('ph-fill', 'ph');
         }
     });
     
     if (view === 'stats') updateStats();
+    if (view === 'bukuDetail') renderBukuDetail();
 };
+
+window.openBukuDetail = function(account) {
+    state.detail.account = account;
+    state.detail.currentDate = new Date(); // Default to current month
+    switchView('bukuDetail');
+};
+
+window.changeMonth = function(delta) {
+    const d = state.detail.currentDate;
+    d.setMonth(d.getMonth() + delta);
+    renderBukuDetail();
+};
+
+function renderBukuDetail() {
+    const account = state.detail.account;
+    const date = state.detail.currentDate;
+    
+    const label = document.getElementById('detailAccountLabel');
+    if (label) label.textContent = account === 'tabungan' ? 'Buku Tabungan' : 'Buku Sehari-hari';
+    
+    const monthYear = document.getElementById('currentMonthYear');
+    if (monthYear) monthYear.textContent = `${MONTH_NAMES[date.getMonth()]} ${date.getFullYear()}`;
+    
+    const list = document.getElementById('detailTransactionList');
+    list.innerHTML = '';
+    
+    const filtered = state.transactions.filter(tx => {
+        const txDate = new Date(tx.date);
+        return tx.account === account && 
+               txDate.getMonth() === date.getMonth() && 
+               txDate.getFullYear() === date.getFullYear();
+    });
+    
+    if (filtered.length === 0) {
+        list.innerHTML = `
+            <div class="text-center text-slate-400 text-sm py-20">
+                <i class="ph ph-calendar-blank text-4xl mb-2 opacity-50"></i>
+                <p>Tidak ada transaksi di bulan ini</p>
+            </div>
+        `;
+        return;
+    }
+    
+    filtered.forEach(tx => {
+        const item = document.createElement('div');
+        item.className = 'flex justify-between items-center p-4 bg-white rounded-2xl border border-slate-100 shadow-sm';
+        
+        const isIncome = tx.type === 'income';
+        const colorClass = isIncome ? 'text-blue-600' : 'text-red-500';
+        const bgClass = isIncome ? 'bg-blue-50' : 'bg-red-50';
+        
+        item.innerHTML = `
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full ${bgClass} ${colorClass} flex items-center justify-center">
+                    <i class="ph ${isIncome ? 'ph-trend-up' : 'ph-trend-down'} text-xl"></i>
+                </div>
+                <div>
+                    <p class="text-sm font-semibold text-slate-800">${tx.description}</p>
+                    <p class="text-[10px] text-slate-400">${new Date(tx.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long' })}</p>
+                </div>
+            </div>
+            <div class="text-right flex flex-col items-end">
+                <p class="text-sm font-bold ${colorClass}">${isIncome ? '+' : '-'}${formatCurrency(tx.amount)}</p>
+                <button onclick="deleteTransaction('${tx.id}')" class="text-[10px] text-slate-300 hover:text-red-400 mt-1">Hapus</button>
+            </div>
+        `;
+        list.appendChild(item);
+    });
+}
 
 window.openSettings = async function() {
     const modal = document.getElementById('settingsModal');

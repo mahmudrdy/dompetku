@@ -283,7 +283,7 @@
         <div class="space-y-4">
             
             <!-- Box Tabungan -->
-            <div class="glass-card bg-white p-6 rounded-3xl shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition-shadow">
+            <div onclick="openBukuDetail('tabungan')" class="glass-card bg-white p-6 rounded-3xl shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition-shadow cursor-pointer">
                 <div class="absolute -right-6 -bottom-6 text-blue-50 opacity-50 group-hover:scale-110 transition-transform duration-500">
                     <i class="ph-fill ph-piggy-bank text-[120px]"></i>
                 </div>
@@ -305,7 +305,7 @@
             </div>
 
             <!-- Box Sehari-hari -->
-            <div class="glass-card bg-white p-6 rounded-3xl shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition-shadow mt-4">
+            <div onclick="openBukuDetail('keperluan')" class="glass-card bg-white p-6 rounded-3xl shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition-shadow mt-4 cursor-pointer">
                 <div class="absolute -right-6 -bottom-6 text-emerald-50 opacity-50 group-hover:scale-110 transition-transform duration-500">
                     <i class="ph-fill ph-wallet text-[120px]"></i>
                 </div>
@@ -326,6 +326,35 @@
                 </div>
             </div>
             
+        </div>
+    </main>
+
+    <!-- BUKU DETAIL VIEW -->
+    <header id="bukuDetailHeader" class="pt-8 pb-4 px-6 bg-white sticky top-0 z-20 glass-card hidden transition-all duration-300">
+        <div class="flex items-center gap-4 mb-4">
+            <button onclick="switchView('buku')" class="w-10 h-10 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center hover:bg-slate-200 transition-colors cursor-pointer">
+                <i class="ph ph-arrow-left text-xl"></i>
+            </button>
+            <div>
+                <p class="text-[11px] font-bold text-blue-600 uppercase tracking-widest" id="detailAccountLabel">Buku Tabungan</p>
+                <h1 class="text-xl font-bold text-slate-900 tracking-tight">Riwayat Transaksi</h1>
+            </div>
+        </div>
+        <!-- Month Selector -->
+        <div class="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-slate-100">
+            <button onclick="changeMonth(-1)" class="p-2 text-slate-400 hover:text-blue-600 transition-colors cursor-pointer">
+                <i class="ph ph-caret-left font-bold"></i>
+            </button>
+            <span class="text-xs font-bold text-slate-700" id="currentMonthYear">Memuat...</span>
+            <button onclick="changeMonth(1)" class="p-2 text-slate-400 hover:text-blue-600 transition-colors cursor-pointer">
+                <i class="ph ph-caret-right font-bold"></i>
+            </button>
+        </div>
+    </header>
+
+    <main id="bukuDetailMain" class="flex-1 overflow-y-auto px-6 pt-6 pb-24 hidden transition-all duration-300">
+        <div id="detailTransactionList" class="flex flex-col gap-4">
+            <!-- Details will be injected here -->
         </div>
     </main>
 
