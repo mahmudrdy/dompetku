@@ -125,10 +125,19 @@ function checkAuth() {
 
 window.tryBiometricLogin = async function() {
     try {
-        console.log("Dompetku: Triggering native biometric prompt...");
+        // 1. Check if we have a registered credential ID
+        const credentialId = localStorage.getItem('dompetku_biometric_id');
         
-        // Mocking a basic WebAuthn challenge for local verification
-        // In a real app, 'challenge' should come from server
+        if (!credentialId) {
+            const wantRegister = confirm("Biometrik belum didaftarkan di perangkat ini.\n\nIngin mendaftarkan sidik jari/wajah Anda sekarang?\n(Anda harus login manual sekali untuk ini)");
+            if (wantRegister) {
+                alert("Silakan login manual dengan Username & Password terlebih dahulu. Setelah masuk, buka Pengaturan untuk mendaftarkan Biometrik.");
+                showPasswordForm();
+            }
+            return;
+        }
+
+        console.log("Dompetku: Triggering native biometric prompt...");
         const challenge = new Uint8Array(32);
         window.crypto.getRandomValues(challenge);
 
@@ -137,27 +146,63 @@ window.tryBiometricLogin = async function() {
                 challenge: challenge,
                 timeout: 60000,
                 userVerification: "required",
-                allowCredentials: [] // Empty means look for any platform credential
+                allowCredentials: [{
+                    id: Uint8Array.from(atob(credentialId), c => c.charCodeAt(0)),
+                    type: 'public-key',
+                    transports: ['internal']
+                }]
             }
         };
 
-        // This triggers the native Windows Hello / TouchID / FaceID prompt
-        // Note: Client-side only get() without allowCredentials might fail on some browsers
-        // so we use a fallback if the prompt fails or isn't supported as expected
         if (navigator.credentials && navigator.credentials.get) {
-            // We use create() if get() is too restrictive for empty credentials
-            // For a simple "unlock", we want to verify user presence/identity
             await navigator.credentials.get(options);
-            
             state.user.isLoggedIn = true;
             checkAuth();
             renderApp();
         } else {
-            throw new Error("API not supported");
+            throw new Error("WebAuthn API not supported");
         }
     } catch (err) {
         console.error("Biometric Authentication failed:", err);
-        alert("Gagal melakukan verifikasi biometrik. Silakan gunakan password.");
+        if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+            alert("GAGAL: Biometrik hanya bisa digunakan di koneksi HTTPS yang aman.\n\nJika Anda membuka lewat IP (seperti 192.168...), fitur ini akan diblokir oleh Browser.");
+        } else {
+            alert("Verifikasi Gagal: " + err.message + "\n\nPastikan Anda sudah mendaftarkan perangkat ini di menu Pengaturan.");
+        }
+    }
+};
+
+window.registerBiometric = async function() {
+    try {
+        const challenge = new Uint8Array(32);
+        window.crypto.getRandomValues(challenge);
+
+        const options = {
+            publicKey: {
+                challenge: challenge,
+                rp: { name: "Dompetku", id: window.location.hostname },
+                user: {
+                    id: new Uint8Array(16),
+                    name: "user@dompetku",
+                    displayName: state.user.name
+                },
+                pubKeyCredParams: [{ alg: -7, type: "public-key" }, { alg: -257, type: "public-key" }],
+                authenticatorSelection: {
+                    authenticatorAttachment: "platform",
+                    userVerification: "required"
+                },
+                timeout: 60000
+            }
+        };
+
+        const credential = await navigator.credentials.create(options);
+        const idBase64 = btoa(String.fromCharCode(...new Uint8Array(credential.rawId)));
+        localStorage.setItem('dompetku_biometric_id', idBase64);
+        
+        alert("BERHASIL! Biometrik Anda sudah terdaftar. Sekarang Anda bisa masuk menggunakan sidik jari.");
+    } catch (err) {
+        console.error("Biometric Registration failed:", err);
+        alert("Gagal mendaftarkan biometrik: " + err.message + "\n\nPastikan perangkat mendukung dan Anda menggunakan HTTPS.");
     }
 };
 
@@ -492,8 +537,16 @@ window.switchView = function(view) {
     if (view === 'stats') updateStats();
 };
 
-window.openSettings = function() {
-    document.getElementById('settingsModal').classList.remove('modal-hidden');
+window.openSettings = async function() {
+    const modal = document.getElementById('settingsModal');
+    modal.classList.remove('modal-hidden');
+
+    // Show biometric registration if supported
+    const biometricDiv = document.getElementById('biometricSettings');
+    if (biometricDiv && window.PublicKeyCredential) {
+        const isAvailable = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+        if (isAvailable) biometricDiv.classList.remove('hidden');
+    }
 };
 
 window.closeSettings = function() {
