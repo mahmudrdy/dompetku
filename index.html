@@ -140,9 +140,12 @@
     <header id="homeHeader" class="pt-8 pb-4 px-6 bg-white sticky top-0 z-10 glass-card transition-all duration-300">
         <div class="flex justify-between items-center mb-6">
             <div>
-                <div class="flex items-center gap-2 mb-1">
-                    <p class="text-[13px] font-semibold text-slate-800" id="userNameDisplay">Halo, Pengguna! 👋</p>
-                </div>
+                    <div class="mb-1">
+                        <p class="text-sm font-bold text-slate-900 flex items-center gap-1.5" id="userNameDisplay">
+                            Halo, Pengguna! <i class="ph ph-hand-waving text-blue-500"></i>
+                        </p>
+                        <p class="text-[12px] text-blue-500/80 font-semibold mt-0.5" id="userGreetingText">Memuat pesan bijak...</p>
+                    </div>
                 <div class="flex items-center gap-2">
                     <p class="text-sm font-medium text-slate-500">Total Saldo</p>
                     <button id="toggleVisibility" onclick="toggleBalanceVisibility()" class="text-slate-400 hover:text-blue-500 transition-colors p-1 rounded-full active:bg-slate-100 flex items-center justify-center cursor-pointer">

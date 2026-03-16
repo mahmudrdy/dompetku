@@ -48,6 +48,7 @@ let state = {
     user: {
         name: "Pengguna",
         budgetLimit: 300000,
+        budgetStartDate: "", // Will be "YYYY-MM"
         isLoggedIn: false
     },
     balances: {
@@ -254,7 +255,17 @@ function setupFirestoreListeners() {
                 const data = docSnap.data();
                 state.user.name = data.name || "Pengguna";
                 state.user.budgetLimit = data.budgetLimit || 300000;
+                state.user.budgetStartDate = data.budgetStartDate || "";
                 state.settings.isBalanceVisible = data.isBalanceVisible ?? true;
+                
+                // Initialize start date if missing
+                if (!state.user.budgetStartDate) {
+                    const now = new Date();
+                    state.user.budgetStartDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+                    saveUserSettings();
+                }
+                
+                calculateBalances();
                 renderApp();
             } else {
                 saveUserSettings();
@@ -268,21 +279,44 @@ function setupFirestoreListeners() {
 }
 
 function calculateBalances() {
-    let tabungan = 0;
-    let keperluan = state.user.budgetLimit;
+    let totalIncome = 0;
+    let incomeKeperluan = 0;
+    let expensesTabungan = 0;
+    let expensesKeperluan = 0;
 
     state.transactions.forEach(tx => {
         if (tx.type === 'income') {
-            tabungan += (tx.account === 'tabungan' ? tx.amount : 0);
-            keperluan += (tx.account === 'keperluan' ? tx.amount : 0);
+            totalIncome += tx.amount;
+            // Respect income added specifically to "Sehari-hari"
+            if (tx.account === 'keperluan') incomeKeperluan += tx.amount;
         } else {
-            tabungan -= (tx.account === 'tabungan' ? tx.amount : 0);
-            keperluan -= (tx.account === 'keperluan' ? tx.amount : 0);
+            if (tx.account === 'tabungan') {
+                expensesTabungan += tx.amount;
+            } else {
+                expensesKeperluan += tx.amount;
+            }
         }
     });
+    
+    // Calculate how many months have passed since start date
+    let monthsPassed = 1;
+    if (state.user.budgetStartDate) {
+        const start = new Date(state.user.budgetStartDate + "-01");
+        const now = new Date();
+        monthsPassed = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth()) + 1;
+    }
+    
+    // Budget priority: Fund "Sehari-hari" first
+    // We target the cumulative budget limit OR the specific income added (whichever is higher)
+    const budgetNeeded = monthsPassed * state.user.budgetLimit;
+    const targetKeperluan = Math.max(budgetNeeded, incomeKeperluan);
+    
+    const allocatedToKeperluan = Math.min(totalIncome, targetKeperluan);
+    const remainingForTabungan = totalIncome - allocatedToKeperluan;
 
-    state.balances.tabungan = tabungan;
-    state.balances.keperluan = keperluan;
+    // Final Balances = Allocation - Expenses
+    state.balances.keperluan = allocatedToKeperluan - expensesKeperluan;
+    state.balances.tabungan = remainingForTabungan - expensesTabungan;
 }
 
 async function saveUserSettings() {
@@ -290,6 +324,7 @@ async function saveUserSettings() {
         await setDoc(doc(db, COLLECTIONS.USER, "current_user"), {
             name: state.user.name,
             budgetLimit: state.user.budgetLimit,
+            budgetStartDate: state.user.budgetStartDate,
             isBalanceVisible: state.settings.isBalanceVisible
         });
     } catch (e) {
@@ -310,10 +345,30 @@ function formatCurrency(amount) {
 function renderApp() {
     try {
 
-        // Update Display Name
+        // Update Display Name & Greeting
         const nameDisplay = document.getElementById('userNameDisplay');
-        if (nameDisplay) nameDisplay.textContent = `Halo, ${state.user.name}! 👋`;
-        
+        if (nameDisplay) {
+            nameDisplay.innerHTML = `Halo, ${state.user.name}! <i class="ph ph-hand-waving text-blue-500"></i>`;
+        }
+
+        const greetingDisplay = document.getElementById('userGreetingText');
+        if (greetingDisplay) {
+            if (!window._currentGreeting) {
+                const greetings = [
+                    "Semangat mencatat keuangan hari ini! <i class='ph ph-rocket-launch'></i>",
+                    "Sudahkah Anda berhemat hari ini? <i class='ph ph-coins'></i>",
+                    "Kelola uang dengan bijak, masa depan cerah. <i class='ph ph-sparkle'></i>",
+                    "Satu rupiah sangat berarti untuk masa depan. <i class='ph ph-coins'></i>",
+                    "Catat setiap pengeluaran, kendalikan masa depan. <i class='ph ph-chart-line-up'></i>",
+                    "Tabungan sedikit-sedikit lama-lama jadi bukit. <i class='ph ph-mountains'></i>",
+                    "Jangan lupa sisihkan untuk masa depan ya! <i class='ph ph-bank'></i>"
+                ];
+                window._currentGreeting = greetings[Math.floor(Math.random() * greetings.length)];
+            }
+            greetingDisplay.innerHTML = window._currentGreeting;
+            console.log("Dompetku: Greeting rendered ->", window._currentGreeting);
+        }
+
         const nameInput = document.getElementById('userNameInput');
         if (nameInput) nameInput.value = state.user.name;
         
