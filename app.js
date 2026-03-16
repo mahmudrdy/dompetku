@@ -1,586 +1,537 @@
-// PWA Service Worker Registration
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js')
-      .then((registration) => console.log('SW registered'))
-      .catch((error) => console.log('SW registration failed:', error));
-  });
-}
+/**
+ * Dompetku - Core Logic
+ */
 
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-app.js";
-import { getFirestore, collection, addDoc, deleteDoc, doc, setDoc, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-firestore.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
+import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-analytics.js";
+import { 
+    initializeFirestore, 
+    collection, 
+    onSnapshot, 
+    doc, 
+    setDoc, 
+    addDoc, 
+    deleteDoc, 
+    query, 
+    orderBy 
+} from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 
+// --- FIREBASE CONFIGURATION ---
 const firebaseConfig = {
-    apiKey: "AIzaSyCskmkr4NiESLklUz_tFfCkKN9SaPVA2cg",
-    authDomain: "mydompett.firebaseapp.com",
-    projectId: "mydompett",
-    storageBucket: "mydompett.firebasestorage.app",
-    messagingSenderId: "117090715890",
-    appId: "1:117090715890:web:30c824d5f9a21c1c01a86b",
-    measurementId: "G-T4Q2FBZD33"
+  apiKey: "AIzaSyAQ9y8HlhTpRyu9-DQWElLSHvCgciGcl7Y",
+  authDomain: "dompeetku.firebaseapp.com",
+  projectId: "dompeetku",
+  storageBucket: "dompeetku.firebasestorage.app",
+  messagingSenderId: "539510262396",
+  appId: "1:539510262396:web:7a60adbebb7a57f05d17f9",
+  measurementId: "G-07CTQEF08D"
 };
 
+console.log(`Dompetku: Initializing Firebase (Unified) for project: ${firebaseConfig.projectId}`);
+
+// Initialize Firebase
 const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-
-// State Management
-let transactions = [];
-let monthlyBudget = 300000;
-let userName = "Pengguna";
-let isBalanceVisible = localStorage.getItem('dompetku_visibility') !== 'false'; // default true
-let isLoggedIn = false;
-
-let unsubTransactions = null;
-let unsubBudget = null;
-
-// DOM Elements
-const mainApp = document.getElementById('mainApp');
-const loginView = document.getElementById('loginView');
-const passwordLoginForm = document.getElementById('passwordLoginForm');
-const loginUsernameInput = document.getElementById('loginUsername');
-const loginPasswordInput = document.getElementById('loginPassword');
-const loginError = document.getElementById('loginError');
-
-const totalBalanceEl = document.getElementById('totalBalance');
-const tabunganBalanceEl = document.getElementById('tabunganBalance');
-const keperluanBalanceEl = document.getElementById('keperluanBalance');
-const transactionListEl = document.getElementById('transactionList');
-const emptyStateEl = document.getElementById('emptyState');
-const modal = document.getElementById('transactionModal');
-const settingsModal = document.getElementById('settingsModal');
-const form = document.getElementById('transactionForm');
-const settingsForm = document.getElementById('settingsForm');
-const amountInput = document.getElementById('amount');
-const budgetInput = document.getElementById('budgetInput');
-const userNameInput = document.getElementById('userNameInput');
-const userNameDisplay = document.getElementById('userNameDisplay');
-const submitBtn = document.getElementById('submitBtn');
-
-// View & Stats Elements
-const homeHeader = document.getElementById('homeHeader');
-const homeMain = document.getElementById('homeMain');
-const statsHeader = document.getElementById('statsHeader');
-const statsMain = document.getElementById('statsMain');
-const navHome = document.getElementById('navHome');
-const navStats = document.getElementById('navStats');
-const iconHome = document.getElementById('iconHome');
-const iconStats = document.getElementById('iconStats');
-
-const statsSpent = document.getElementById('statsSpent');
-const statsBudget = document.getElementById('statsBudget');
-const statsProgressBar = document.getElementById('statsProgressBar');
-const statsPercentage = document.getElementById('statsPercentage');
-const statsTotalIncome = document.getElementById('statsTotalIncome');
-const statsTotalExpense = document.getElementById('statsTotalExpense');
-
-const bukuHeader = document.getElementById('bukuHeader');
-const bukuMain = document.getElementById('bukuMain');
-const navBuku = document.getElementById('navBuku');
-const iconBuku = document.getElementById('iconBuku');
-
-const bukuTabunganBalance = document.getElementById('bukuTabunganBalance');
-const bukuKeperluanBalance = document.getElementById('bukuKeperluanBalance');
-
-const visibilityIcon = document.getElementById('visibilityIcon');
-
-// Current State
-let currentView = 'home';
-
-// Auth Login Logic
-function executeLogin() {
-    isLoggedIn = true;
-    loginView.classList.add('hidden');
-    mainApp.classList.remove('hidden');
-    mainApp.classList.add('flex'); // Because the class is flex-col
-    
-    // Start syncing with Firebase
-    loadDataFromFirebase();
+let analytics;
+try {
+    analytics = getAnalytics(app);
+} catch (e) {
+    console.warn("Dompetku: Analytics initialization failed");
 }
 
-function loadDataFromFirebase() {
-    // Listen to user profile
-    const profileDoc = doc(db, "settings", "profile");
-    onSnapshot(profileDoc, (docSnap) => {
-        if (docSnap.exists() && docSnap.data().name) {
-            userName = docSnap.data().name;
-        } else {
-            setDoc(profileDoc, { name: "Pengguna" });
-        }
-        if (userNameDisplay) userNameDisplay.textContent = `Halo, ${userName}! 👋`;
-    });
+// Initialize Firestore with Long Polling to bypass blocked WebSockets
+const db = initializeFirestore(app, {
+  experimentalForceLongPolling: true,
+});
 
-    // Listen to budget changes
-    const budgetDoc = doc(db, "settings", "budget");
-    unsubBudget = onSnapshot(budgetDoc, (docSnap) => {
-        if (docSnap.exists()) {
-            monthlyBudget = docSnap.data().amount || 300000;
-        } else {
-            // First time running app on this DB instance, set default
-            setDoc(budgetDoc, { amount: 300000 });
-        }
-        updateBalances();
-    });
-
-    // Listen to real-time transactions
-    const q = query(collection(db, "transactions"), orderBy("date", "desc"));
-    unsubTransactions = onSnapshot(q, (snapshot) => {
-        transactions = []; // reset local memory
-        snapshot.forEach((docSnap) => {
-            transactions.push({ id: docSnap.id, ...docSnap.data() });
-        });
-        updateBalances();
-        renderTransactions();
-    });
-}
-
-window.showPasswordForm = () => {
-    document.getElementById('btnBiometric').classList.add('hidden');
-    passwordLoginForm.classList.remove('hidden');
+// --- STATE MANAGEMENT ---
+let state = {
+    user: {
+        name: "Pengguna",
+        budgetLimit: 300000,
+        isLoggedIn: false
+    },
+    balances: {
+        tabungan: 0,
+        keperluan: 0
+    },
+    transactions: [],
+    settings: {
+        isBalanceVisible: true
+    }
 };
 
-window.tryBiometricLogin = async () => {
-    try {
-        if (window.PublicKeyCredential && await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()) {
-            const credentialIdStr = localStorage.getItem('dompetku_biometric_id');
-            
-            if (credentialIdStr) {
-                // Try to authenticate
-                const challenge = new Uint8Array(32);
-                crypto.getRandomValues(challenge);
-                
-                const assertion = await navigator.credentials.get({
-                    publicKey: {
-                        challenge: challenge,
-                        allowCredentials: [{
-                            type: "public-key",
-                            id: Uint8Array.from(atob(credentialIdStr), c => c.charCodeAt(0))
-                        }],
-                        userVerification: "required"
-                    }
-                });
-                
-                if (assertion) executeLogin();
-                
-            } else {
-                // First time, register (Mocking RP for local/demo use)
-                const challenge = new Uint8Array(32);
-                crypto.getRandomValues(challenge);
-                const userId = new Uint8Array(16);
-                crypto.getRandomValues(userId);
+const COLLECTIONS = {
+    TRANSACTIONS: "transactions",
+    USER: "user_data"
+};
 
-                const credential = await navigator.credentials.create({
-                    publicKey: {
-                        challenge: challenge,
-                        rp: { name: "Dompetku App", id: window.location.hostname || "localhost" },
-                        user: { id: userId, name: "user", displayName: "User" },
-                        pubKeyCredParams: [{ type: "public-key", alg: -7 }, { type: "public-key", alg: -257 }],
-                        authenticatorSelection: { authenticatorAttachment: "platform", userVerification: "required" }
-                    }
-                });
-                
-                if (credential) {
-                    const idStr = btoa(String.fromCharCode.apply(null, new Uint8Array(credential.rawId)));
-                    localStorage.setItem('dompetku_biometric_id', idStr);
-                    executeLogin();
-                }
+// --- INITIALIZATION ---
+async function init() {
+    // Check for file protocol
+    if (window.location.protocol === 'file:') {
+        console.warn("Dompetku: Running on file:// protocol. Firebase & Biometrics might be limited.");
+    }
+
+    await checkBiometricSupport();
+    checkAuth();
+    setupFirestoreListeners();
+    setupEventListeners();
+    renderApp();
+
+    // Register Service Worker
+    if ('serviceWorker' in navigator) {
+        try {
+            await navigator.serviceWorker.register('./sw.js');
+            console.log("Dompetku: Service Worker registered");
+        } catch (e) {
+            console.error("Dompetku: Service Worker registration failed", e);
+        }
+    }
+}
+
+async function checkBiometricSupport() {
+    const btn = document.getElementById('btnBiometric');
+    if (!btn) return;
+
+    if (window.PublicKeyCredential && 
+        await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()) {
+        btn.classList.remove('hidden');
+        console.log("Dompetku: Biometric support detected");
+    } else {
+        btn.classList.add('hidden');
+        console.log("Dompetku: Biometric support not available on this device");
+    }
+}
+
+// --- AUTHENTICATION ---
+function checkAuth() {
+    const loginView = document.getElementById('loginView');
+    const mainApp = document.getElementById('mainApp');
+    
+    if (!loginView || !mainApp) return;
+
+    if (state.user.isLoggedIn) {
+        console.log("Dompetku: Access granted");
+        loginView.classList.add('hidden');
+        mainApp.classList.remove('hidden');
+        document.body.classList.remove('overflow-hidden');
+    } else {
+        console.log("Dompetku: Login required");
+        loginView.classList.remove('hidden');
+        mainApp.classList.add('hidden');
+        document.body.classList.add('overflow-hidden');
+    }
+}
+
+window.tryBiometricLogin = async function() {
+    try {
+        console.log("Dompetku: Triggering native biometric prompt...");
+        
+        // Mocking a basic WebAuthn challenge for local verification
+        // In a real app, 'challenge' should come from server
+        const challenge = new Uint8Array(32);
+        window.crypto.getRandomValues(challenge);
+
+        const options = {
+            publicKey: {
+                challenge: challenge,
+                timeout: 60000,
+                userVerification: "required",
+                allowCredentials: [] // Empty means look for any platform credential
             }
+        };
+
+        // This triggers the native Windows Hello / TouchID / FaceID prompt
+        // Note: Client-side only get() without allowCredentials might fail on some browsers
+        // so we use a fallback if the prompt fails or isn't supported as expected
+        if (navigator.credentials && navigator.credentials.get) {
+            // We use create() if get() is too restrictive for empty credentials
+            // For a simple "unlock", we want to verify user presence/identity
+            await navigator.credentials.get(options);
+            
+            state.user.isLoggedIn = true;
+            checkAuth();
+            renderApp();
         } else {
-            // Biometric not available
-            showPasswordForm();
+            throw new Error("API not supported");
         }
     } catch (err) {
-        console.warn("Biometric failed or cancelled", err);
-        showPasswordForm();
+        console.error("Biometric Authentication failed:", err);
+        alert("Gagal melakukan verifikasi biometrik. Silakan gunakan password.");
     }
 };
 
-window.handlePasswordLogin = (e) => {
-    e.preventDefault();
-    const u = loginUsernameInput.value;
-    const p = loginPasswordInput.value;
-    
-    // Default fallback credentials: admin / admin
-    if (u === 'admin' && p === 'admin') {
-        executeLogin();
-        // Clear inputs for security
-        loginUsernameInput.value = '';
-        loginPasswordInput.value = '';
-        loginError.classList.add('hidden');
+window.showPasswordForm = function() {
+    const form = document.getElementById('passwordLoginForm');
+    if (form) form.classList.toggle('hidden');
+};
+
+window.handlePasswordLogin = function(event) {
+    event.preventDefault();
+    const user = document.getElementById('loginUsername').value;
+    const pass = document.getElementById('loginPassword').value;
+    const error = document.getElementById('loginError');
+
+    if (user === 'admin' && pass === 'admin') {
+        state.user.isLoggedIn = true;
+        checkAuth();
+        renderApp();
     } else {
-        loginError.classList.remove('hidden');
+        if (error) error.classList.remove('hidden');
     }
 };
 
-// Helper: Format to IDR
-const formatRupiah = (number) => {
+// --- FIRESTORE LISTENERS ---
+function setupFirestoreListeners() {
+    console.log("Dompetku: Syncing with Firestore...");
+    
+    try {
+        // Listen for Transactions
+        const qTransactions = query(collection(db, COLLECTIONS.TRANSACTIONS), orderBy("date", "desc"));
+        onSnapshot(qTransactions, (snapshot) => {
+            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            state.transactions = data;
+            calculateBalances();
+            renderApp();
+        }, (error) => {
+            console.error("Dompetku: Transaction Sync Error:", error);
+            if (error.code === 'permission-denied') {
+                alert("Firebase Access Denied! \n\nData tidak bisa masuk karena aturan keamanan (Rules) di Firebase Console Anda. \n\nSilakan ubah Rules di Firestore menjadi: \nallow read, write: if true;");
+            } else if (error.code === 'unavailable') {
+                alert("Firebase sedang tidak tersedia. Periksa koneksi internet Anda.");
+            }
+        });
+
+        // Listen for User Data
+        onSnapshot(doc(db, COLLECTIONS.USER, "current_user"), (docSnap) => {
+            if (docSnap.exists()) {
+                console.log("Dompetku: User settings synced");
+                const data = docSnap.data();
+                state.user.name = data.name || "Pengguna";
+                state.user.budgetLimit = data.budgetLimit || 300000;
+                state.settings.isBalanceVisible = data.isBalanceVisible ?? true;
+                renderApp();
+            } else {
+                saveUserSettings();
+            }
+        }, (error) => {
+            console.error("Dompetku: Sync Error:", error);
+        });
+    } catch (e) {
+        console.error("Dompetku: Init Error:", e);
+    }
+}
+
+function calculateBalances() {
+    let tabungan = 0;
+    let keperluan = state.user.budgetLimit;
+
+    state.transactions.forEach(tx => {
+        if (tx.type === 'income') {
+            tabungan += (tx.account === 'tabungan' ? tx.amount : 0);
+            keperluan += (tx.account === 'keperluan' ? tx.amount : 0);
+        } else {
+            tabungan -= (tx.account === 'tabungan' ? tx.amount : 0);
+            keperluan -= (tx.account === 'keperluan' ? tx.amount : 0);
+        }
+    });
+
+    state.balances.tabungan = tabungan;
+    state.balances.keperluan = keperluan;
+}
+
+async function saveUserSettings() {
+    try {
+        await setDoc(doc(db, COLLECTIONS.USER, "current_user"), {
+            name: state.user.name,
+            budgetLimit: state.user.budgetLimit,
+            isBalanceVisible: state.settings.isBalanceVisible
+        });
+    } catch (e) {
+        console.error("Error saving user settings: ", e);
+        alert("GAGAL SIMPAN PENGATURAN: " + e.message);
+    }
+}
+
+// --- UI UPDATES ---
+function formatCurrency(amount) {
     return new Intl.NumberFormat('id-ID', {
         style: 'currency',
         currency: 'IDR',
         minimumFractionDigits: 0
-    }).format(number);
-};
-
-// Helper: Format Date
-const formatDate = (dateString) => {
-    const options = { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' };
-    return new Date(dateString).toLocaleDateString('id-ID', options);
-};
-
-// Initialize App
-function initApp() {
-    updateBalances();
-    renderTransactions();
+    }).format(amount).replace('Rp', 'Rp ');
 }
 
-// Update Balances Calculation
-function updateBalances() {
-    let totalIncome = 0;
-    let tabunganExpense = 0;
-    let keperluanExpense = 0;
+function renderApp() {
+    try {
 
-    // Determine the number of months since the user started recording (first transaction)
-    let totalAllocatedBudget = monthlyBudget;
-    
-    if (transactions.length > 0) {
-        const oldestDate = new Date(Math.min(...transactions.map(t => new Date(t.date))));
-        const currentDate = new Date();
+        // Update Display Name
+        const nameDisplay = document.getElementById('userNameDisplay');
+        if (nameDisplay) nameDisplay.textContent = `Halo, ${state.user.name}! 👋`;
         
-        // Month difference. e.g. same month/year = 0 difference -> 1 month budget
-        const monthsPassed = (currentDate.getFullYear() - oldestDate.getFullYear()) * 12 + 
-                             (currentDate.getMonth() - oldestDate.getMonth());
+        const nameInput = document.getElementById('userNameInput');
+        if (nameInput) nameInput.value = state.user.name;
         
-        totalAllocatedBudget = monthlyBudget * (monthsPassed + 1);
-    }
+        const budgetInp = document.getElementById('budgetInput');
+        if (budgetInp) budgetInp.value = state.user.budgetLimit.toLocaleString('id-ID');
 
-    // Calculate all incomes and expenses
-    transactions.forEach(t => {
-        const amount = parseFloat(t.amount);
-        if (t.type === 'income') {
-            totalIncome += amount;
-        } else {
-            if (t.account === 'tabungan') tabunganExpense += amount;
-            if (t.account === 'keperluan') keperluanExpense += amount;
+        // Update Balances
+        const total = state.balances.tabungan + state.balances.keperluan;
+        
+        const balanceElements = {
+            'totalBalance': state.settings.isBalanceVisible ? formatCurrency(total) : 'Rp ••••••••',
+            'tabunganBalance': state.settings.isBalanceVisible ? formatCurrency(state.balances.tabungan) : 'Rp ••••',
+            'keperluanBalance': state.settings.isBalanceVisible ? formatCurrency(state.balances.keperluan) : 'Rp ••••',
+            'bukuTabunganBalance': formatCurrency(state.balances.tabungan),
+            'bukuKeperluanBalance': formatCurrency(state.balances.keperluan)
+        };
+
+        for (const [id, value] of Object.entries(balanceElements)) {
+            const el = document.getElementById(id);
+            if (el) el.textContent = value;
         }
-    });
-
-    // Saldo Sehari-hari adalah Total Budget yang telah dialokasikan (tiap bulan bertambah) dikurangi Pengeluaran Sehari-hari
-    let keperluan = totalAllocatedBudget - keperluanExpense;
-    
-    // Saldo Tabungan adalah Total Semua Pemasukan dikurangi (Total Budget Sehari-hari yang disisihkan + Pengeluaran Tabungan)
-    // Jika Total Pemasukan belum mencapai Budget Sehari-hari, tabungan bisa minus atau kita anggap 0.  
-    let tabungan = totalIncome - totalAllocatedBudget - tabunganExpense;
-
-    // Total Saldo keseluruhan uang yang ada saat ini
-    const total = tabungan + keperluan;
-
-    if (isBalanceVisible) {
-        totalBalanceEl.textContent = formatRupiah(total);
-        tabunganBalanceEl.textContent = formatRupiah(tabungan);
-        keperluanBalanceEl.textContent = formatRupiah(keperluan);
-        visibilityIcon.className = "ph ph-eye text-lg";
-    } else {
-        totalBalanceEl.textContent = "Rp •••••••";
-        tabunganBalanceEl.textContent = "Rp •••••";
-        keperluanBalanceEl.textContent = "Rp •••••";
-        visibilityIcon.className = "ph ph-eye-closed text-lg";
-    }
-
-    // Update Views
-    updateStatsView(totalAllocatedBudget, keperluanExpense, totalIncome, tabunganExpense + keperluanExpense);
-    updateBukuView(tabungan, keperluan);
-}
-
-// Update Buku DOM
-function updateBukuView(tabungan, keperluan) {
-    if(!bukuTabunganBalance) return;
-    bukuTabunganBalance.textContent = formatRupiah(tabungan);
-    bukuKeperluanBalance.textContent = formatRupiah(keperluan);
-}
-
-// Update Stats DOM
-function updateStatsView(budget, spent, income, totalExpense) {
-    if(!statsSpent) return; // safety check if DOM not loaded yet
-
-    statsSpent.textContent = formatRupiah(spent);
-    statsBudget.textContent = formatRupiah(budget);
-    
-    let percentage = 0;
-    if (budget > 0) {
-        percentage = Math.min(100, Math.round((spent / budget) * 100));
-    }
-    
-    statsProgressBar.style.width = `${percentage}%`;
-    statsPercentage.textContent = `${percentage}% Terpakai`;
-    
-    // Color change on progress bar if near full
-    if (percentage > 85) {
-        statsProgressBar.className = "h-full bg-red-500 rounded-full transition-all duration-1000 ease-out";
-    } else if (percentage > 60) {
-        statsProgressBar.className = "h-full bg-amber-500 rounded-full transition-all duration-1000 ease-out";
-    } else {
-        statsProgressBar.className = "h-full bg-blue-500 rounded-full transition-all duration-1000 ease-out";
-    }
-
-    statsTotalIncome.textContent = formatRupiah(income);
-    statsTotalExpense.textContent = formatRupiah(totalExpense);
-}
-
-// Render Transaction List
-function renderTransactions() {
-    transactionListEl.innerHTML = '';
-    
-    if (transactions.length === 0) {
-        transactionListEl.appendChild(emptyStateEl);
-        emptyStateEl.style.display = 'block';
-        return;
-    }
-    
-    emptyStateEl.style.display = 'none';
-
-    // Sort by newest
-    const sorted = [...transactions].sort((a, b) => new Date(b.date) - new Date(a.date));
-
-    sorted.forEach((t, index) => {
-        const isIncome = t.type === 'income';
-        const sign = isIncome ? '+' : '-';
-        // According to the screenshot, Income is blue, Expense would likely be a red/orange.
-        const colorClass = isIncome ? 'text-blue-600' : 'text-slate-800'; // Make expense darker or red, income blue
-        const iconBg = isIncome ? 'bg-blue-50' : 'bg-slate-50';
-        const iconColor = isIncome ? 'text-blue-600' : 'text-slate-600';
         
-        // Let's use simpler line icons to match the design (e.g., arrow down left or up right, or just simple carets)
-        const icon = isIncome ? 'ph-arrow-down-left' : 'ph-arrow-up-right';
-        
-        let accountIcon = t.account === 'tabungan' ? 'ph-piggy-bank' : 'ph-wallet';
-        let accountLabel = t.account === 'tabungan' ? 'Tabungan' : 'Sehari-hari';
+        // Update Visibility Icon
+        const icon = document.getElementById('visibilityIcon');
+        if (icon) {
+            icon.className = state.settings.isBalanceVisible ? 'ph ph-eye text-lg' : 'ph ph-eye-slash text-lg';
+        }
 
-        const item = document.createElement('div');
-        item.className = 'relative w-full bg-white p-[18px] sm:p-5 rounded-3xl shadow-[0_2px_20px_rgba(0,0,0,0.03)] flex items-center gap-4 mb-3 border border-slate-50 hover:border-slate-100 transition-all group';
-        item.innerHTML = `
-            <!-- Left Arrow Icon -->
-            <div class="w-[46px] h-[46px] sm:w-[50px] sm:h-[50px] shrink-0 rounded-full ${iconBg} flex items-center justify-center ${iconColor}">
-                <i class="ph ${icon} text-lg sm:text-xl font-medium"></i>
-            </div>
-            
-            <!-- Middle Text & Right Amount -->
-            <div class="flex-1 min-w-0 flex flex-col justify-center gap-1.5 relative">
-                <!-- Top Row: Title & Amount -->
-                <div class="flex justify-between items-start gap-2">
-                    <h4 class="text-slate-800 font-semibold text-[15px] sm:text-[16px] truncate">${t.description}</h4>
-                    <span class="font-bold whitespace-nowrap text-[14px] sm:text-[15px] tracking-tight ${colorClass} mt-0.5">${sign} ${formatRupiah(t.amount)}</span>
-                </div>
-                
-                <!-- Bottom Row: Pill, Date & Trash -->
-                <div class="flex justify-between items-center pr-1 sm:pr-0">
-                    <div class="flex items-center gap-2 text-[11px] sm:text-xs font-medium text-slate-400 whitespace-nowrap overflow-hidden text-ellipsis w-full pr-6">
-                        <span class="flex items-center gap-1.5 px-2 py-0.5 rounded border border-slate-200/60 bg-white text-slate-500 shrink-0 shadow-sm">
-                            <i class="ph ${accountIcon} text-blue-500"></i> ${accountLabel}
-                        </span>
-                        <span class="opacity-40 shrink-0">•</span>
-                        <span class="truncate">${formatDate(t.date)}</span>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Absolute Trash Button (Bottom Right Aligned) -->
-            <button onclick="deleteTransaction('${t.id}')" class="absolute bottom-[16px] sm:bottom-[18px] right-[16px] sm:right-[18px] text-slate-300 hover:text-red-500 transition-colors cursor-pointer p-1.5 -m-1.5 rounded flex items-center justify-center sm:opacity-0 sm:group-hover:opacity-100">
-                <i class="ph ph-trash text-base"></i>
-            </button>
-        `;
-        transactionListEl.appendChild(item);
-    });
-}
-
-// Delete Transaction
-window.deleteTransaction = async (id) => {
-    if(confirm('Hapus transaksi ini?')) {
-        try {
-            await deleteDoc(doc(db, "transactions", id));
-        } catch(err) {
-            console.error("Error deleting document: ", err);
+        renderTransactions();
+        updateStats();
+    } catch (e) {
+        console.error("Dompetku: Render Error:", e);
+        // Alert but only if it's the first time to avoid loops
+        if (!window._lastRenderError) {
+            window._lastRenderError = e.message;
+            alert("Ada kesalahan saat menampilkan data. Coba hapus cache atau periksa input terakhir Anda.");
         }
     }
-};
-// Toggle Balance Visibility
-window.toggleBalanceVisibility = () => {
-    isBalanceVisible = !isBalanceVisible;
-    localStorage.setItem('dompetku_visibility', isBalanceVisible.toString());
-    updateBalances();
+}
+
+window.toggleBalanceVisibility = async function() {
+    state.settings.isBalanceVisible = !state.settings.isBalanceVisible;
+    await saveUserSettings();
 };
 
-// Modal Functions - Transaction
-window.openModal = () => {
+// --- TRANSACTION MANAGEMENT ---
+window.openModal = function() {
+    const modal = document.getElementById('transactionModal');
     modal.classList.remove('modal-hidden');
-    form.reset();
-    updateFormUI();
-    // small delay to focus
-    setTimeout(() => amountInput.focus(), 100);
 };
 
-window.closeModal = () => {
+window.closeModal = function() {
+    const modal = document.getElementById('transactionModal');
     modal.classList.add('modal-hidden');
+    document.getElementById('transactionForm').reset();
+    updateFormUI();
 };
 
-// Modal Functions - Settings
-window.openSettings = () => {
-    settingsModal.classList.remove('modal-hidden');
-    budgetInput.value = formatRupiahInput(monthlyBudget.toString());
-    userNameInput.value = userName;
-};
-
-window.closeSettings = () => {
-    settingsModal.classList.add('modal-hidden');
-};
-
-// Expose saveSettings
-window.saveSettings = async (newBudget, newName) => {
-    try {
-        await setDoc(doc(db, "settings", "budget"), { amount: newBudget });
-        if(newName) {
-            await setDoc(doc(db, "settings", "profile"), { name: newName });
-        }
-    } catch(err) {
-        console.error("Error setting settings:", err);
-    }
-};
-
-// View Switcher
-window.switchView = (view) => {
-    currentView = view;
-    
-    // Hide all panels
-    homeHeader.classList.add('hidden');
-    homeMain.classList.add('hidden');
-    statsHeader.classList.add('hidden');
-    statsMain.classList.add('hidden');
-    if(bukuHeader) bukuHeader.classList.add('hidden');
-    if(bukuMain) bukuMain.classList.add('hidden');
-    
-    // Reset all nav icons
-    navHome.className = "flex flex-col items-center text-slate-400 gap-1 hover:text-blue-600 transition-colors w-12";
-    iconHome.className = "ph ph-house text-2xl";
-    navStats.className = "flex flex-col items-center text-slate-400 gap-1 hover:text-blue-600 transition-colors w-12";
-    iconStats.className = "ph ph-chart-line-up text-2xl";
-    if(navBuku) {
-        navBuku.className = "flex flex-col items-center text-slate-400 gap-1 hover:text-blue-600 transition-colors w-12";
-        iconBuku.className = "ph ph-credit-card text-2xl";
-    }
-    
-    if (view === 'home') {
-        homeHeader.classList.remove('hidden');
-        homeMain.classList.remove('hidden');
-        navHome.className = "flex flex-col items-center text-blue-600 gap-1 w-12 transition-colors";
-        iconHome.className = "ph-fill ph-house text-2xl";
-    } else if (view === 'stats') {
-        statsHeader.classList.remove('hidden');
-        statsMain.classList.remove('hidden');
-        navStats.className = "flex flex-col items-center text-blue-600 gap-1 w-12 transition-colors";
-        iconStats.className = "ph-fill ph-chart-line-up text-2xl";
-    } else if (view === 'buku') {
-        if(bukuHeader) bukuHeader.classList.remove('hidden');
-        if(bukuMain) bukuMain.classList.remove('hidden');
-        if(navBuku) {
-            navBuku.className = "flex flex-col items-center text-blue-600 gap-1 w-12 transition-colors";
-            iconBuku.className = "ph-fill ph-credit-card text-2xl";
-        }
-    }
-};
-
-// Close modals when clicking outside
-modal.addEventListener('click', (e) => {
-    if (e.target === modal) closeModal();
-});
-
-settingsModal.addEventListener('click', (e) => {
-    if (e.target === settingsModal) closeSettings();
-});
-
-// Update Form UI based on Type
-window.updateFormUI = () => {
+window.updateFormUI = function() {
     const type = document.querySelector('input[name="type"]:checked').value;
-    if (type === 'income') {
-        submitBtn.className = "w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold shadow-lg shadow-blue-500/30 transition-all cursor-pointer";
-        submitBtn.textContent = 'Simpan Pemasukan';
-    } else {
-        submitBtn.className = "w-full py-3.5 bg-red-500 hover:bg-red-600 text-white rounded-xl font-semibold shadow-lg shadow-red-500/30 transition-all cursor-pointer";
-        submitBtn.textContent = 'Simpan Pengeluaran';
-    }
+    const submitBtn = document.getElementById('submitBtn');
+    submitBtn.textContent = type === 'income' ? 'Simpan Pemasukan' : 'Simpan Pengeluaran';
+    submitBtn.className = type === 'income' 
+        ? 'w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold shadow-lg shadow-blue-500/30 transition-all cursor-pointer'
+        : 'w-full py-3.5 bg-red-600 hover:bg-red-700 text-white rounded-xl font-semibold shadow-lg shadow-red-500/30 transition-all cursor-pointer';
 };
 
-// Handle Form Submit
-form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    
-    const type = document.querySelector('input[name="type"]:checked').value;
-    const account = document.querySelector('input[name="account"]:checked').value;
-    
-    const amountStr = amountInput.value.replace(/[^0-9]/g, '');
-    const amount = parseFloat(amountStr);
-    const description = document.getElementById('description').value;
+function setupEventListeners() {
+    const form = document.getElementById('transactionForm');
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        try {
+            const type = document.querySelector('input[name="type"]:checked').value;
+            const account = document.querySelector('input[name="account"]:checked').value;
+            const amountStr = document.getElementById('amount').value.replace(/\./g, '').trim();
+            const amount = parseInt(amountStr);
+            const description = document.getElementById('description').value.trim().substring(0, 100); // Limit length and trim
 
-    if (isNaN(amount) || amount <= 0 || !description) {
-        alert('Masukkan nominal dan deskripsi yang valid');
-        return;
-    }
+            if (!amountStr || isNaN(amount) || amount <= 0) {
+                alert("Mohon masukkan nominal yang valid!");
+                return;
+            }
+            if (!description) {
+                alert("Mohon masukkan keterangan transaksi!");
+                return;
+            }
 
-    const newTransaction = {
-        type: type,
-        // If it's an income, we default the account to 'tabungan' strictly in logic 
-        // to simplify the flow (all incoming money goes to main pool).
-        account: type === 'income' ? 'tabungan' : account,
-        amount: amount,
-        description: description,
-        date: new Date().toISOString()
-    };
+            const transaction = {
+                type,
+                account,
+                amount,
+                description,
+                date: new Date().toISOString()
+            };
 
-    closeModal();
-    try {
-        await addDoc(collection(db, "transactions"), newTransaction);
-    } catch(err) {
-        console.error("Error adding document", err);
-    }
-});
+            await addDoc(collection(db, COLLECTIONS.TRANSACTIONS), transaction);
+            closeModal();
+        } catch (error) {
+            console.error("Dompetku: Save Error:", error);
+            alert("Gagal menyimpan transaksi!\n\nKode Error: " + error.code + "\nPesan: " + error.message + "\n\nBiasanya ini karena 'Rules' di Firebase Console belum diatur ke mode 'Test Mode'.");
+        }
+    });
 
-// Handle Settings Submit
-settingsForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const rawAmount = budgetInput.value.replace(/\./g, '').replace(/,/g, '');
-    const amount = parseFloat(rawAmount);
-    const newName = userNameInput.value.trim();
+    // Formatting amount input
+    const amountInput = document.getElementById('amount');
+    amountInput.addEventListener('input', function(e) {
+        let val = this.value.replace(/\D/g, '');
+        if (val) {
+            this.value = parseInt(val).toLocaleString('id-ID');
+        } else {
+            this.value = '';
+        }
+    });
 
-    if (isNaN(amount) || amount < 0) {
-        alert('Masukkan nominal yang valid');
-        return;
-    }
+    const budgetInput = document.getElementById('budgetInput');
+    budgetInput.addEventListener('input', function(e) {
+        let val = this.value.replace(/\D/g, '');
+        if (val) {
+            this.value = parseInt(val).toLocaleString('id-ID');
+        } else {
+            this.value = '';
+        }
+    });
 
-    window.saveSettings(amount, newName);
-    closeSettings();
-});
-
-// Helper for real-time formatting
-function formatRupiahInput(value) {
-    let cleanVal = value.replace(/[^,\d]/g, '').toString();
-    const split = cleanVal.split(',');
-    const sisa = split[0].length % 3;
-    let rupiah = split[0].substr(0, sisa);
-    const ribuan = split[0].substr(sisa).match(/\d{3}/gi);
-
-    if (ribuan) {
-        const separator = sisa ? '.' : '';
-        rupiah += separator + ribuan.join('.');
-    }
-
-    return split[1] != undefined ? rupiah + ',' + split[1] : rupiah;
+    document.getElementById('settingsForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        state.user.name = document.getElementById('userNameInput').value;
+        state.user.budgetLimit = parseInt(document.getElementById('budgetInput').value.replace(/\./g, '')) || 0;
+        await saveUserSettings();
+        closeSettings();
+    });
 }
 
-// Realtime Rupiah formatting on Input
-amountInput.addEventListener('input', function(e) {
-    this.value = formatRupiahInput(this.value);
-});
+function renderTransactions() {
+    const list = document.getElementById('transactionList');
+    const emptyState = document.getElementById('emptyState');
+    
+    if (state.transactions.length === 0) {
+        emptyState.classList.remove('hidden');
+        list.querySelectorAll('.transaction-item').forEach(el => el.remove());
+        return;
+    }
 
-budgetInput.addEventListener('input', function(e) {
-    this.value = formatRupiahInput(this.value);
-});
+    emptyState.classList.add('hidden');
+    
+    // Clear current list items except empty state
+    list.querySelectorAll('.transaction-item').forEach(el => el.remove());
 
-// Call init on load
-initApp();
+    state.transactions.forEach(tx => {
+        const item = document.createElement('div');
+        item.className = 'transaction-item flex justify-between items-center p-4 bg-white rounded-2xl border border-slate-100 shadow-sm';
+        
+        const isIncome = tx.type === 'income';
+        const colorClass = isIncome ? 'text-blue-600' : 'text-red-500';
+        const bgClass = isIncome ? 'bg-blue-50' : 'bg-red-50';
+        const iconClass = tx.account === 'tabungan' ? 'ph ph-piggy-bank' : 'ph ph-wallet';
+        
+        // Securing against XSS by using separate elements for user-generated content
+        const leftSide = document.createElement('div');
+        leftSide.className = 'flex items-center gap-3';
+        leftSide.innerHTML = `
+            <div class="w-10 h-10 rounded-full ${bgClass} ${colorClass} flex items-center justify-center">
+                <i class="${iconClass} text-xl"></i>
+            </div>
+            <div>
+                <p class="text-sm font-semibold text-slate-800 desc-text"></p>
+                <p class="text-[11px] text-slate-400 capitalize">${tx.account} • ${new Date(tx.date).toLocaleDateString('id-ID')}</p>
+            </div>
+        `;
+        // Safe injection
+        leftSide.querySelector('.desc-text').textContent = tx.description;
+
+        const rightSide = document.createElement('div');
+        rightSide.className = 'text-right';
+        rightSide.innerHTML = `
+            <p class="text-sm font-bold ${colorClass}">${isIncome ? '+' : '-'}${formatCurrency(tx.amount)}</p>
+            <button class="text-[10px] text-slate-300 hover:text-red-400 transition-colors btn-delete">Hapus</button>
+        `;
+        rightSide.querySelector('.btn-delete').onclick = () => deleteTransaction(tx.id);
+
+        item.appendChild(leftSide);
+        item.appendChild(rightSide);
+        list.appendChild(item);
+    });
+}
+
+window.deleteTransaction = async function(id) {
+    if (confirm('Hapus transaksi ini?')) {
+        try {
+            await deleteDoc(doc(db, COLLECTIONS.TRANSACTIONS, id));
+        } catch (e) {
+            console.error("Error deleting transaction: ", e);
+            alert("Gagal menghapus transaksi.");
+        }
+    }
+};
+
+// --- VIEW NAVIGATION ---
+window.switchView = function(view) {
+    const views = ['home', 'stats', 'buku'];
+    views.forEach(v => {
+        const header = document.getElementById(`${v}Header`);
+        const main = document.getElementById(`${v}Main`);
+        const nav = document.getElementById(`nav${v.charAt(0).toUpperCase() + v.slice(1)}`);
+        const icon = document.getElementById(`icon${v.charAt(0).toUpperCase() + v.slice(1)}`);
+
+        if (v === view) {
+            header.classList.remove('hidden');
+            main.classList.remove('hidden');
+            nav.classList.replace('text-slate-400', 'text-blue-600');
+            if (icon) icon.classList.replace('ph', 'ph-fill');
+        } else {
+            header.classList.add('hidden');
+            main.classList.add('hidden');
+            nav.classList.replace('text-blue-600', 'text-slate-400');
+            if (icon) icon.classList.replace('ph-fill', 'ph');
+        }
+    });
+    
+    if (view === 'stats') updateStats();
+};
+
+window.openSettings = function() {
+    document.getElementById('settingsModal').classList.remove('modal-hidden');
+};
+
+window.closeSettings = function() {
+    document.getElementById('settingsModal').classList.add('modal-hidden');
+};
+
+// --- STATS LOGIC ---
+function updateStats() {
+    const expenses = state.transactions.filter(t => t.type === 'expense');
+    const incomes = state.transactions.filter(t => t.type === 'income');
+    
+    const totalExpense = expenses.reduce((sum, t) => sum + t.amount, 0);
+    const totalIncome = incomes.reduce((sum, t) => sum + t.amount, 0);
+    
+    // Sehari-hari stats
+    const spentDaily = expenses
+        .filter(t => t.account === 'keperluan')
+        .reduce((sum, t) => sum + t.amount, 0);
+    
+    const budget = state.user.budgetLimit;
+    const percent = budget > 0 ? Math.min(Math.round((spentDaily / budget) * 100), 100) : 0;
+    
+    const statsSpent = document.getElementById('statsSpent');
+    const statsBudget = document.getElementById('statsBudget');
+    const statsPercentage = document.getElementById('statsPercentage');
+    const statsProgressBar = document.getElementById('statsProgressBar');
+    const statsTotalIncome = document.getElementById('statsTotalIncome');
+    const statsTotalExpense = document.getElementById('statsTotalExpense');
+
+    if (statsSpent) statsSpent.textContent = formatCurrency(spentDaily);
+    if (statsBudget) statsBudget.textContent = formatCurrency(budget);
+    if (statsPercentage) statsPercentage.textContent = `${percent}%`;
+    if (statsProgressBar) statsProgressBar.style.width = `${percent}%`;
+    if (statsTotalIncome) statsTotalIncome.textContent = formatCurrency(totalIncome);
+    if (statsTotalExpense) statsTotalExpense.textContent = formatCurrency(totalExpense);
+}
+
+// --- FINAL INITIALIZATION ---
+init();
+console.log("Dompetku: Application initialized and ready.");
+

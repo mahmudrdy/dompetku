@@ -140,7 +140,9 @@
     <header id="homeHeader" class="pt-8 pb-4 px-6 bg-white sticky top-0 z-10 glass-card transition-all duration-300">
         <div class="flex justify-between items-center mb-6">
             <div>
-                <p class="text-[13px] font-semibold text-slate-800 mb-1" id="userNameDisplay">Halo, Pengguna! 👋</p>
+                <div class="flex items-center gap-2 mb-1">
+                    <p class="text-[13px] font-semibold text-slate-800" id="userNameDisplay">Halo, Pengguna! 👋</p>
+                </div>
                 <div class="flex items-center gap-2">
                     <p class="text-sm font-medium text-slate-500">Total Saldo</p>
                     <button id="toggleVisibility" onclick="toggleBalanceVisibility()" class="text-slate-400 hover:text-blue-500 transition-colors p-1 rounded-full active:bg-slate-100 flex items-center justify-center cursor-pointer">
@@ -453,6 +455,9 @@
                         <input type="text" id="budgetInput" required placeholder="300.000" class="block w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-semibold focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:bg-white outline-none transition-all" inputmode="numeric">
                     </div>
                 </div>
+
+                <!-- Empty space for spacing -->
+                <div class="pt-2"></div>
 
                 <!-- Submit -->
                 <div class="pt-4 pb-safe">
