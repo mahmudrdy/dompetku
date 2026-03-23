@@ -29,16 +29,13 @@
             -webkit-tap-highlight-color: transparent; /* Remove tap highlight on mobile */
         }
         
-        /* Modern Scrollbar */
-        ::-webkit-scrollbar {
-            width: 4px;
+        /* Hide Scrollbar but keep functionality */
+        * {
+            -ms-overflow-style: none;  /* IE and Edge */
+            scrollbar-width: none;  /* Firefox */
         }
-        ::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #cbd5e1;
-            border-radius: 4px;
+        *::-webkit-scrollbar {
+            display: none; /* Chrome, Safari and Opera */
         }
         
         .glass-card {
