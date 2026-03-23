@@ -514,18 +514,35 @@ function setupEventListeners() {
     });
 }
 
-function renderTransactions() {
+function renderTransactions(showAll = false) {
     const list = document.getElementById('transactionList');
     const emptyState = document.getElementById('emptyState');
+    const allBtn = document.querySelector('[onclick="renderTransactions(true)"]');
     
-    // Filter for current month only on Home screen
-    const now = new Date();
-    const currentMonthTransactions = state.transactions.filter(tx => {
-        const txDate = new Date(tx.date);
-        return txDate.getMonth() === now.getMonth() && txDate.getFullYear() === now.getFullYear();
-    });
+    const container = document.getElementById('transactionListContainer');
+    
+    // Determine which transactions to show
+    let displayTransactions = [];
+    
+    if (showAll) {
+        // Show all transactions from all time
+        displayTransactions = state.transactions;
+        if (allBtn) {
+            allBtn.textContent = 'Sembunyikan';
+            allBtn.setAttribute('onclick', 'renderTransactions(false)');
+        }
+        if (container) container.classList.add('show-all');
+    } else {
+        // Default: Show latest transactions (limit to 5)
+        displayTransactions = state.transactions.slice(0, 5); 
+        if (allBtn) {
+            allBtn.textContent = 'Semua';
+            allBtn.setAttribute('onclick', 'renderTransactions(true)');
+        }
+        if (container) container.classList.remove('show-all');
+    }
 
-    if (currentMonthTransactions.length === 0) {
+    if (displayTransactions.length === 0) {
         emptyState.classList.remove('hidden');
         list.querySelectorAll('.transaction-item').forEach(el => el.remove());
         return;
@@ -536,7 +553,7 @@ function renderTransactions() {
     // Clear current list items
     list.querySelectorAll('.transaction-item').forEach(el => el.remove());
 
-    currentMonthTransactions.forEach(tx => {
+    displayTransactions.forEach(tx => {
         const item = document.createElement('div');
         item.className = 'transaction-item flex justify-between items-center p-4 bg-white rounded-2xl border border-slate-100 shadow-sm transition-all hover:bg-slate-50';
         

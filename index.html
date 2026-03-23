@@ -90,6 +90,40 @@
             left: 50%;
             transform: translateX(-50%);
         }
+
+        /* Prevent FAB from covering last items */
+        .pb-safe-bottom {
+            padding-bottom: 120px;
+        }
+
+        .transaction-container {
+            max-height: 420px; /* Limit height on home to ~5 items */
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Fade out effect when limited */
+        .transaction-container::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 60px;
+            background: linear-gradient(to top, #f8fafc, transparent);
+            pointer-events: none;
+            transition: opacity 0.3s;
+            opacity: 1;
+        }
+
+        .transaction-container.show-all {
+            max-height: none;
+            overflow: visible;
+        }
+
+        .transaction-container.show-all::after {
+            opacity: 0;
+        }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-800 antialiased selection:bg-blue-200 selection:text-blue-900 overflow-hidden touch-pan-y">
@@ -184,18 +218,20 @@
     </header>
 
     <!-- Main Content (Transactions) -->
-    <main id="homeMain" class="flex-1 overflow-y-auto px-6 pt-6 pb-24 transition-all duration-300">
+    <main id="homeMain" class="flex-1 overflow-y-auto px-6 pt-6 pb-24 transition-all duration-300 scroll-smooth">
         <div class="flex justify-between items-center mb-4">
             <h3 class="text-lg font-semibold text-slate-800">Riwayat Transaksi</h3>
-            <button class="text-sm text-blue-600 font-medium" onclick="renderTransactions()">Semua</button>
+            <button class="text-sm text-blue-600 font-medium" onclick="renderTransactions(true)">Semua</button>
         </div>
         
-        <div id="transactionList" class="flex flex-col gap-3">
-             <!-- Transactions will be injected here via JS -->
-             <div class="text-center text-slate-400 text-sm py-10" id="emptyState">
-                <i class="ph ph-receipt text-4xl mb-2 opacity-50"></i>
-                <p>Belum ada transaksi</p>
-             </div>
+        <div id="transactionListContainer" class="transaction-container">
+            <div id="transactionList" class="flex flex-col gap-3 pb-8">
+                 <!-- Transactions will be injected here via JS -->
+                 <div class="text-center text-slate-400 text-sm py-10" id="emptyState">
+                    <i class="ph ph-receipt text-4xl mb-2 opacity-50"></i>
+                    <p>Belum ada transaksi</p>
+                 </div>
+            </div>
         </div>
     </main>
 
