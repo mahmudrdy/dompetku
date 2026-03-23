@@ -77,10 +77,12 @@
             width: 100%;
             max-width: 480px;
             margin: 0 auto;
-            min-height: 100vh;
+            height: 100dvh;
             background-color: #f8fafc;
             position: relative;
             box-shadow: 0 0 40px rgba(0,0,0,0.05);
+            display: flex;
+            flex-direction: column;
         }
         
         /* Bottom Nav Centering trick for fixed position */
@@ -93,11 +95,11 @@
 
         /* Prevent FAB from covering last items */
         .pb-safe-bottom {
-            padding-bottom: 120px;
+            padding-bottom: 140px;
         }
 
         .transaction-container {
-            max-height: 420px; /* Limit height on home to ~5 items */
+            max-height: 500px; /* Limit height on home to ~6-7 items */
             overflow: hidden;
             position: relative;
         }
@@ -167,7 +169,7 @@
 </div>
 
 <!-- MAIN APP (Hidden initially) -->
-<div id="mainApp" class="app-container hidden flex-col h-screen overflow-hidden">
+<div id="mainApp" class="app-container hidden flex-col h-dvh overflow-hidden">
     
     <!-- HOME VIEW (Default) -->
     <!-- Top Bar -->
@@ -218,10 +220,10 @@
     </header>
 
     <!-- Main Content (Transactions) -->
-    <main id="homeMain" class="flex-1 overflow-y-auto px-6 pt-6 pb-24 transition-all duration-300 scroll-smooth">
+    <main id="homeMain" class="flex-1 overflow-y-auto px-6 pt-6 pb-40 transition-all duration-300 scroll-smooth overscroll-contain">
         <div class="flex justify-between items-center mb-4">
             <h3 class="text-lg font-semibold text-slate-800">Riwayat Transaksi</h3>
-            <button class="text-sm text-blue-600 font-medium" onclick="renderTransactions(true)">Semua</button>
+            <button id="toggleAllHomeBtn" class="text-sm text-blue-600 font-medium" onclick="renderTransactions(true)">Semua</button>
         </div>
         
         <div id="transactionListContainer" class="transaction-container">
@@ -250,7 +252,7 @@
     </header>
 
     <!-- Stats Main -->
-    <main id="statsMain" class="flex-1 overflow-y-auto px-6 pt-6 pb-24 hidden transition-all duration-300">
+    <main id="statsMain" class="flex-1 overflow-y-auto px-6 pt-6 pb-40 hidden transition-all duration-300 overscroll-contain">
         <div class="glass-card bg-white p-5 rounded-3xl shadow-sm border border-slate-100 mb-6">
             <h3 class="text-sm font-semibold text-slate-500 mb-4">Penggunaan Budget Sehari-hari</h3>
             <div class="flex justify-between items-end mb-2">
@@ -315,7 +317,7 @@
     </header>
 
     <!-- Buku Main -->
-    <main id="bukuMain" class="flex-1 overflow-y-auto px-6 pt-6 pb-24 hidden transition-all duration-300">
+    <main id="bukuMain" class="flex-1 overflow-y-auto px-6 pt-6 pb-40 hidden transition-all duration-300 overscroll-contain">
         <div class="space-y-4">
             
             <!-- Box Tabungan -->
@@ -388,7 +390,7 @@
         </div>
     </header>
 
-    <main id="bukuDetailMain" class="flex-1 overflow-y-auto px-6 pt-6 pb-24 hidden transition-all duration-300">
+    <main id="bukuDetailMain" class="flex-1 overflow-y-auto px-6 pt-6 pb-40 hidden transition-all duration-300 overscroll-contain">
         <div id="detailTransactionList" class="flex flex-col gap-4">
             <!-- Details will be injected here -->
         </div>

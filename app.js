@@ -62,7 +62,8 @@ let state = {
     },
     transactions: [],
     settings: {
-        isBalanceVisible: true
+        isBalanceVisible: true,
+        showAllTransactions: false
     }
 };
 
@@ -514,12 +515,17 @@ function setupEventListeners() {
     });
 }
 
-function renderTransactions(showAll = false) {
+function renderTransactions(toggle = null) {
     const list = document.getElementById('transactionList');
     const emptyState = document.getElementById('emptyState');
-    const allBtn = document.querySelector('[onclick="renderTransactions(true)"]');
-    
+    const allBtn = document.getElementById('toggleAllHomeBtn');
     const container = document.getElementById('transactionListContainer');
+
+    if (toggle !== null) {
+        state.settings.showAllTransactions = toggle;
+    }
+
+    const showAll = state.settings.showAllTransactions;
     
     // Determine which transactions to show
     let displayTransactions = [];
@@ -529,7 +535,7 @@ function renderTransactions(showAll = false) {
         displayTransactions = state.transactions;
         if (allBtn) {
             allBtn.textContent = 'Sembunyikan';
-            allBtn.setAttribute('onclick', 'renderTransactions(false)');
+            allBtn.onclick = () => renderTransactions(false);
         }
         if (container) container.classList.add('show-all');
     } else {
@@ -537,7 +543,7 @@ function renderTransactions(showAll = false) {
         displayTransactions = state.transactions.slice(0, 5); 
         if (allBtn) {
             allBtn.textContent = 'Semua';
-            allBtn.setAttribute('onclick', 'renderTransactions(true)');
+            allBtn.onclick = () => renderTransactions(true);
         }
         if (container) container.classList.remove('show-all');
     }
