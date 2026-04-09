@@ -12,6 +12,8 @@ import {
     setDoc, 
     addDoc, 
     deleteDoc, 
+    getDocs,
+    writeBatch,
     query, 
     orderBy 
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
@@ -594,7 +596,13 @@ function renderTransactions(toggle = null) {
 }
 
 window.deleteTransaction = async function(id) {
-    if (confirm('Hapus transaksi ini?')) {
+    const confirmDelete = await showConfirm(
+        "Hapus Transaksi?", 
+        "Data transaksi ini akan dihapus secara permanen.",
+        "Ya, Hapus",
+        "red"
+    );
+    if (confirmDelete) {
         try {
             await deleteDoc(doc(db, COLLECTIONS.TRANSACTIONS, id));
         } catch (e) {
@@ -755,6 +763,111 @@ function updateStats() {
     if (statsTotalIncome) statsTotalIncome.textContent = formatCurrency(totalIncome);
     if (statsTotalExpense) statsTotalExpense.textContent = formatCurrency(totalExpense);
 }
+
+window.resetAllData = async function() {
+    const confirm1 = await showConfirm(
+        "⚠️ Perhatian!", 
+        "Anda akan menghapus SELURUH data transaksi dan pengaturan. Tindakan ini tidak dapat dibatalkan.",
+        "Lanjutkan",
+        "red"
+    );
+    if (!confirm1) return;
+
+    const confirm2 = await showConfirm(
+        "Konfirmasi Terakhir",
+        "Semua riwayat keuangan akan hilang permanen termasuk data biometrik. Yakin?",
+        "Ya, Hapus Semua",
+        "red"
+    );
+    if (!confirm2) return;
+
+    try {
+        console.log("Dompetku: Resetting all data...");
+        
+        // 1. Delete all transactions
+        const snapshot = await getDocs(collection(db, COLLECTIONS.TRANSACTIONS));
+        const batch = writeBatch(db);
+        snapshot.docs.forEach((doc) => {
+            batch.delete(doc.ref);
+        });
+        await batch.commit();
+
+        // 2. Reset user settings to defaults
+        await setDoc(doc(db, COLLECTIONS.USER, "current_user"), {
+            name: "Pengguna",
+            budgetLimit: 300000,
+            budgetStartDate: "",
+            isBalanceVisible: true
+        });
+
+        // 3. Clear local biometric data
+        localStorage.removeItem('dompetku_biometric_id');
+
+        // Show Success Alert before reload
+        await showConfirm("Berhasil!", "Semua data telah diatur ulang.", "Ok, Siap", "blue");
+        window.location.reload();
+    } catch (e) {
+        console.error("Dompetku: Reset Error:", e);
+        alert("Gagal mengatur ulang data: " + e.message + "\n\nPastikan koneksi internet stabil.");
+    }
+};
+
+window.showConfirm = function(title, message, confirmText = "Ya, Lanjutkan", color = "red") {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('alertModal');
+        const card = modal.querySelector('div');
+        const titleEl = document.getElementById('alertTitle');
+        const msgEl = document.getElementById('alertMessage');
+        const confirmBtn = document.getElementById('alertConfirmBtn');
+        const cancelBtn = document.getElementById('alertCancelBtn');
+        const iconContainer = document.getElementById('alertIconContainer');
+        const icon = document.getElementById('alertIcon');
+
+        titleEl.textContent = title;
+        msgEl.textContent = message;
+        confirmBtn.textContent = confirmText;
+        
+        // Update color theme
+        if (color === 'red') {
+            confirmBtn.className = "w-full py-4 bg-red-500 text-white rounded-2xl font-bold shadow-lg shadow-red-500/30 active:scale-[0.98] transition-all cursor-pointer";
+            iconContainer.className = "w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-6";
+            icon.className = "ph-fill ph-warning-octagon text-4xl";
+        } else {
+            confirmBtn.className = "w-full py-4 bg-blue-600 text-white rounded-2xl font-bold shadow-lg shadow-blue-500/30 active:scale-[0.98] transition-all cursor-pointer";
+            iconContainer.className = "w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-6";
+            icon.className = "ph-fill ph-check-circle text-4xl";
+        }
+
+        modal.classList.remove('modal-hidden');
+        setTimeout(() => {
+            card.classList.remove('scale-90', 'opacity-0');
+            card.classList.add('scale-100', 'opacity-100');
+        }, 10);
+
+        const handleConfirm = () => {
+            cleanup();
+            resolve(true);
+        };
+
+        const handleCancel = () => {
+            cleanup();
+            resolve(false);
+        };
+
+        const cleanup = () => {
+            card.classList.remove('scale-100', 'opacity-100');
+            card.classList.add('scale-90', 'opacity-0');
+            setTimeout(() => {
+                modal.classList.add('modal-hidden');
+            }, 300);
+            confirmBtn.removeEventListener('click', handleConfirm);
+            cancelBtn.removeEventListener('click', handleCancel);
+        };
+
+        confirmBtn.addEventListener('click', handleConfirm);
+        cancelBtn.addEventListener('click', handleCancel);
+    });
+};
 
 // --- FINAL INITIALIZATION ---
 init();
