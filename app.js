@@ -448,6 +448,21 @@ window.closeModal = function() {
 };
 
 window.updateFormUI = function() {
+    const account = document.querySelector('input[name="account"]:checked').value;
+    const typeIncomeRadio = document.querySelector('input[name="type"][value="income"]');
+    const typeExpenseRadio = document.querySelector('input[name="type"][value="expense"]');
+    
+    if (account === 'keperluan') {
+        if (typeIncomeRadio.checked) {
+            typeExpenseRadio.checked = true;
+        }
+        typeIncomeRadio.disabled = true;
+        typeIncomeRadio.parentElement.classList.add('opacity-40', 'pointer-events-none');
+    } else {
+        typeIncomeRadio.disabled = false;
+        typeIncomeRadio.parentElement.classList.remove('opacity-40', 'pointer-events-none');
+    }
+
     const type = document.querySelector('input[name="type"]:checked').value;
     const submitBtn = document.getElementById('submitBtn');
     submitBtn.textContent = type === 'income' ? 'Simpan Pemasukan' : 'Simpan Pengeluaran';
@@ -739,35 +754,167 @@ window.closeSettings = function() {
     document.getElementById('settingsModal').classList.add('modal-hidden');
 };
 
+// --- REPORT EXPORT ---
+window.exportToPDF = function(type) {
+    if (state.transactions.length === 0) {
+        alert("Tidak ada data transaksi untuk diekspor.");
+        return;
+    }
+
+    try {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        
+        const now = new Date();
+        const currentMonth = now.getMonth();
+        const currentYear = now.getFullYear();
+        const monthName = MONTH_NAMES[currentMonth];
+
+        // Filter data
+        let exportData = [];
+        let title = "";
+        
+        if (type === 'month') {
+            exportData = state.transactions.filter(t => {
+                const d = new Date(t.date);
+                return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+            });
+            title = `Laporan Keuangan - ${monthName} ${currentYear}`;
+        } else {
+            exportData = [...state.transactions];
+            title = `Laporan Keuangan - Keseluruhan`;
+        }
+
+        if (exportData.length === 0) {
+            alert("Tidak ada data pada periode ini.");
+            return;
+        }
+
+        // Sort ascending by date for report
+        exportData.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+        let totalIncome = 0;
+        let totalExpense = 0;
+
+        // Table Rows
+        const tableBody = exportData.map((t, index) => {
+            const dateStr = new Date(t.date).toLocaleDateString('id-ID');
+            const typeStr = t.type === 'income' ? 'Pemasukan' : 'Pengeluaran';
+            const accountStr = t.account === 'tabungan' ? 'Tabungan' : 'Sehari-hari';
+            const amountRaw = t.amount;
+            
+            if (t.type === 'income') totalIncome += t.amount;
+            else totalExpense += t.amount;
+
+            return [
+                index + 1,
+                dateStr,
+                typeStr,
+                accountStr,
+                t.description,
+                t.type === 'income' ? amountRaw.toLocaleString('id-ID') : '-',
+                t.type === 'expense' ? amountRaw.toLocaleString('id-ID') : '-'
+            ];
+        });
+
+        // Add PDF content
+        doc.setFontSize(16);
+        doc.text("DOMPETKU", 14, 15);
+        doc.setFontSize(11);
+        doc.text(title, 14, 22);
+        doc.text(`Dicetak pada: ${now.toLocaleDateString('id-ID')} ${now.toLocaleTimeString('id-ID')}`, 14, 28);
+
+        // Usage of autoTable
+        doc.autoTable({
+            startY: 35,
+            head: [['No', 'Tanggal', 'Tipe', 'Buku', 'Keterangan', 'Pemasukan', 'Pengeluaran']],
+            body: tableBody,
+            theme: 'grid',
+            headStyles: { fillColor: [59, 130, 246] },
+            styles: { fontSize: 9 },
+            columnStyles: {
+                0: { cellWidth: 10 },
+                5: { halign: 'right' },
+                6: { halign: 'right' }
+            }
+        });
+
+        const finalY = doc.lastAutoTable.finalY + 10;
+        
+        doc.setFontSize(10);
+        doc.text("Ringkasan Total:", 14, finalY);
+        doc.text(`Total Pemasukan : Rp ${totalIncome.toLocaleString('id-ID')}`, 14, finalY + 6);
+        doc.text(`Total Pengeluaran : Rp ${totalExpense.toLocaleString('id-ID')}`, 14, finalY + 12);
+        doc.text(`Saldo Akhir       : Rp ${(totalIncome - totalExpense).toLocaleString('id-ID')}`, 14, finalY + 18);
+
+        // Save PDF
+        const filename = type === 'month' ? `Laporan_${monthName}_${currentYear}.pdf` : `Laporan_Keseluruhan.pdf`;
+        doc.save(filename);
+        
+    } catch (error) {
+        console.error("PDF Export Error: ", error);
+        alert("Gagal membuat PDF. Pastikan internet aktif saat export pertama kali agar sistem bisa mengambil template cetak.");
+    }
+};
+
 // --- STATS LOGIC ---
 function updateStats() {
-    const expenses = state.transactions.filter(t => t.type === 'expense');
-    const incomes = state.transactions.filter(t => t.type === 'income');
-    
-    const totalExpense = expenses.reduce((sum, t) => sum + t.amount, 0);
-    const totalIncome = incomes.reduce((sum, t) => sum + t.amount, 0);
-    
-    // Sehari-hari stats
-    const spentDaily = expenses
-        .filter(t => t.account === 'keperluan')
-        .reduce((sum, t) => sum + t.amount, 0);
-    
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    // Filter by current month
+    const currentMonthTxs = state.transactions.filter(t => {
+        const d = new Date(t.date);
+        return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    });
+
+    const cmExpenses = currentMonthTxs.filter(t => t.type === 'expense');
+    const cmIncomes = currentMonthTxs.filter(t => t.type === 'income');
+
+    const cmTotalIncome = cmIncomes.reduce((sum, t) => sum + t.amount, 0);
+    const cmTotalExpense = cmExpenses.reduce((sum, t) => sum + t.amount, 0);
+
+    const cmExpenseKeperluan = cmExpenses.filter(t => t.account === 'keperluan').reduce((sum, t) => sum + t.amount, 0);
+    const cmExpenseTabungan = cmExpenses.filter(t => t.account === 'tabungan').reduce((sum, t) => sum + t.amount, 0);
+
     const budget = state.user.budgetLimit;
-    const percent = budget > 0 ? Math.min(Math.round((spentDaily / budget) * 100), 100) : 0;
+    const percent = budget > 0 ? Math.min(Math.round((cmExpenseKeperluan / budget) * 100), 100) : 0;
     
     const statsSpent = document.getElementById('statsSpent');
     const statsBudget = document.getElementById('statsBudget');
     const statsPercentage = document.getElementById('statsPercentage');
     const statsProgressBar = document.getElementById('statsProgressBar');
-    const statsTotalIncome = document.getElementById('statsTotalIncome');
-    const statsTotalExpense = document.getElementById('statsTotalExpense');
+    
+    const statsMonthlyIncome = document.getElementById('statsMonthlyIncome');
+    const statsMonthlyTabungan = document.getElementById('statsMonthlyTabungan');
+    const statsMonthlyKeperluan = document.getElementById('statsMonthlyKeperluan');
+    const statsMonthlyExpense = document.getElementById('statsMonthlyExpense');
 
-    if (statsSpent) statsSpent.textContent = formatCurrency(spentDaily);
+    if (statsSpent) statsSpent.textContent = formatCurrency(cmExpenseKeperluan);
     if (statsBudget) statsBudget.textContent = formatCurrency(budget);
     if (statsPercentage) statsPercentage.textContent = `${percent}%`;
     if (statsProgressBar) statsProgressBar.style.width = `${percent}%`;
-    if (statsTotalIncome) statsTotalIncome.textContent = formatCurrency(totalIncome);
-    if (statsTotalExpense) statsTotalExpense.textContent = formatCurrency(totalExpense);
+    
+    if (statsMonthlyIncome) statsMonthlyIncome.textContent = formatCurrency(cmTotalIncome);
+    if (statsMonthlyTabungan) statsMonthlyTabungan.textContent = formatCurrency(cmExpenseTabungan);
+    if (statsMonthlyKeperluan) statsMonthlyKeperluan.textContent = formatCurrency(cmExpenseKeperluan);
+    if (statsMonthlyExpense) statsMonthlyExpense.textContent = formatCurrency(cmTotalExpense);
+    
+    // Update Home View expenses and respect visibility settings
+    const homeTabunganExpense = document.getElementById('homeTabunganExpense');
+    const homeKeperluanExpense = document.getElementById('homeKeperluanExpense');
+    const homeTotalExpense = document.getElementById('homeTotalExpense');
+    
+    if (homeTabunganExpense) {
+        homeTabunganExpense.textContent = state.settings.isBalanceVisible ? `- ${formatCurrency(cmExpenseTabungan)}` : 'Rp ••••';
+    }
+    if (homeKeperluanExpense) {
+        homeKeperluanExpense.textContent = state.settings.isBalanceVisible ? `- ${formatCurrency(cmExpenseKeperluan)}` : 'Rp ••••';
+    }
+    if (homeTotalExpense) {
+        homeTotalExpense.textContent = state.settings.isBalanceVisible ? `- ${formatCurrency(cmTotalExpense)}` : 'Rp ••••';
+    }
 }
 
 window.resetAllData = async function() {

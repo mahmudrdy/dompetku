@@ -22,6 +22,10 @@
     <!-- Phosphor Icons for modern minimalist icons -->
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
     
+    <!-- jsPDF for Export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+    
     <style>
         body {
             font-family: 'Plus Jakarta Sans', sans-serif;
@@ -203,32 +207,55 @@
         <!-- Balance Cards -->
          <div class="grid grid-cols-2 gap-3 pb-2">
             <!-- Savings Card -->
-            <div class="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl p-4 sm:p-5 text-white shadow-lg shadow-blue-500/30 relative overflow-hidden">
+            <div class="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl p-4 sm:p-5 text-white shadow-lg shadow-blue-500/30 relative overflow-hidden flex flex-col justify-between">
                 <div class="absolute -right-4 -top-4 w-20 h-20 bg-white/10 rounded-full blur-xl"></div>
-                <div class="flex items-center gap-1.5 mb-2 opacity-90 text-[11px] sm:text-xs font-medium">
-                    <i class="ph ph-piggy-bank text-[16px] sm:text-lg"></i>
-                    <span>Tabungan</span>
+                <div>
+                    <div class="flex items-center gap-1.5 mb-2 opacity-90 text-[11px] sm:text-xs font-medium">
+                        <i class="ph ph-piggy-bank text-[16px] sm:text-lg"></i>
+                        <span>Tabungan</span>
+                    </div>
+                    <h2 class="text-lg sm:text-xl font-bold truncate tracking-tight transition-all" id="tabunganBalance">Rp 0</h2>
                 </div>
-                <h2 class="text-lg sm:text-xl font-bold truncate tracking-tight" id="tabunganBalance">Rp 0</h2>
+                <div class="mt-3 pt-2 border-t border-white/20 flex items-center justify-between text-[10px] sm:text-[11px] opacity-90">
+                    <span>Klr Bln Ini</span>
+                    <span id="homeTabunganExpense" class="font-semibold transition-all">- Rp 0</span>
+                </div>
             </div>
             
             <!-- Daily Needs Card -->
-            <div class="bg-gradient-to-br from-emerald-400 to-teal-500 rounded-2xl p-4 sm:p-5 text-white shadow-lg shadow-emerald-500/30 relative overflow-hidden">
+            <div class="bg-gradient-to-br from-emerald-400 to-teal-500 rounded-2xl p-4 sm:p-5 text-white shadow-lg shadow-emerald-500/30 relative overflow-hidden flex flex-col justify-between">
                  <div class="absolute -right-4 -top-4 w-20 h-20 bg-white/10 rounded-full blur-xl"></div>
-                <div class="flex items-center gap-1.5 mb-2 opacity-90 text-[11px] sm:text-xs font-medium">
-                    <i class="ph ph-wallet text-[16px] sm:text-lg"></i>
-                    <span>Sehari-hari</span>
+                 <div>
+                    <div class="flex items-center gap-1.5 mb-2 opacity-90 text-[11px] sm:text-xs font-medium">
+                        <i class="ph ph-wallet text-[16px] sm:text-lg"></i>
+                        <span>Sehari-hari</span>
+                    </div>
+                    <h2 class="text-lg sm:text-xl font-bold truncate tracking-tight transition-all" id="keperluanBalance">Rp 0</h2>
+                 </div>
+                 <div class="mt-3 pt-2 border-t border-white/20 flex items-center justify-between text-[10px] sm:text-[11px] opacity-90">
+                    <span>Klr Bln Ini</span>
+                    <span id="homeKeperluanExpense" class="font-semibold transition-all">- Rp 0</span>
                 </div>
-                <h2 class="text-lg sm:text-xl font-bold truncate tracking-tight" id="keperluanBalance">Rp 0</h2>
             </div>
+         </div>
+         
+         <!-- Total Pengeluaran -->
+         <div class="mt-3 bg-red-50/80 rounded-2xl p-3 sm:px-4 flex justify-between items-center border border-red-100/50 shadow-sm transition-all hover:scale-[1.01]">
+             <div class="flex items-center gap-2.5 text-red-600">
+                 <div class="w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm text-red-500">
+                     <i class="ph ph-trend-down text-base"></i>
+                 </div>
+                 <span class="text-xs sm:text-sm font-semibold">Total Pengeluaran Bulan Ini</span>
+             </div>
+             <span class="text-sm sm:text-base font-bold text-red-600 tracking-tight transition-all" id="homeTotalExpense">- Rp 0</span>
          </div>
     </header>
 
     <!-- Main Content (Transactions) -->
-    <main id="homeMain" class="flex-1 overflow-y-auto px-6 pt-6 pb-40 transition-all duration-300 scroll-smooth overscroll-contain">
-        <div class="flex justify-between items-center mb-4">
+    <main id="homeMain" class="flex-1 overflow-y-auto px-6 pb-40 transition-all duration-300 scroll-smooth overscroll-contain relative">
+        <div class="sticky top-0 z-20 bg-[#f8fafc]/95 backdrop-blur-md -mx-6 px-6 pt-6 pb-4 flex justify-between items-center mb-1">
             <h3 class="text-lg font-semibold text-slate-800">Riwayat Transaksi</h3>
-            <button id="toggleAllHomeBtn" class="text-sm text-blue-600 font-medium" onclick="renderTransactions(true)">Semua</button>
+            <button id="toggleAllHomeBtn" class="text-sm text-blue-600 font-medium cursor-pointer" onclick="renderTransactions(true)">Semua</button>
         </div>
         
         <div id="transactionListContainer" class="transaction-container">
@@ -278,8 +305,9 @@
         </div>
 
         <div class="glass-card bg-white p-5 rounded-3xl shadow-sm border border-slate-100">
-            <h3 class="text-sm font-semibold text-slate-500 mb-4">Ringkasan Total</h3>
+            <h3 class="text-sm font-semibold text-slate-500 mb-4">Ringkasan Bulan Ini</h3>
             <div class="space-y-4">
+                
                 <div class="flex justify-between items-center p-3 sm:p-4 bg-slate-50 rounded-2xl">
                     <div class="flex items-center gap-3">
                         <div class="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center">
@@ -287,22 +315,62 @@
                         </div>
                         <div>
                             <p class="text-xs text-slate-500 font-medium">Total Pemasukan</p>
-                            <p class="text-sm font-bold text-slate-800" id="statsTotalIncome">Rp 0</p>
+                            <p class="text-sm font-bold text-slate-800" id="statsMonthlyIncome">Rp 0</p>
                         </div>
                     </div>
                 </div>
 
                 <div class="flex justify-between items-center p-3 sm:p-4 bg-slate-50 rounded-2xl">
                     <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 rounded-full bg-red-100 text-red-500 flex items-center justify-center">
-                            <i class="ph ph-trend-down text-lg"></i>
+                        <div class="w-10 h-10 rounded-full bg-orange-100 text-orange-500 flex items-center justify-center">
+                            <i class="ph ph-piggy-bank text-lg"></i>
                         </div>
                         <div>
-                            <p class="text-xs text-slate-500 font-medium">Total Pengeluaran</p>
-                            <p class="text-sm font-bold text-slate-800" id="statsTotalExpense">Rp 0</p>
+                            <p class="text-xs text-slate-500 font-medium">Pengeluaran Tabungan</p>
+                            <p class="text-sm font-bold text-slate-800" id="statsMonthlyTabungan">Rp 0</p>
                         </div>
                     </div>
                 </div>
+
+                <div class="flex justify-between items-center p-3 sm:p-4 bg-slate-50 rounded-2xl">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-500 flex items-center justify-center">
+                            <i class="ph ph-wallet text-lg"></i>
+                        </div>
+                        <div>
+                            <p class="text-xs text-slate-500 font-medium">Pengeluaran Sehari-hari</p>
+                            <p class="text-sm font-bold text-slate-800" id="statsMonthlyKeperluan">Rp 0</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex justify-between items-center p-3 sm:p-4 bg-red-50 rounded-2xl">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center">
+                            <i class="ph ph-trend-down text-lg"></i>
+                        </div>
+                        <div>
+                            <p class="text-xs text-red-600 font-medium">Total Pengeluaran</p>
+                            <p class="text-sm font-bold text-red-700" id="statsMonthlyExpense">Rp 0</p>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Export Section -->
+        <div class="glass-card bg-white p-5 rounded-3xl shadow-sm border border-slate-100 mt-6">
+            <h3 class="text-sm font-semibold text-slate-500 mb-4">Cetak Laporan (PDF)</h3>
+            <div class="flex gap-3">
+                <button onclick="exportToPDF('month')" class="flex-1 py-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer text-center">
+                    <i class="ph ph-file-pdf text-lg"></i>
+                    Bulan Ini
+                </button>
+                <button onclick="exportToPDF('all')" class="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer text-center">
+                    <i class="ph ph-files text-lg"></i>
+                    Keseluruhan
+                </button>
             </div>
         </div>
     </main>
@@ -460,12 +528,12 @@
                     <label class="block text-sm font-medium text-slate-600 mb-1.5">Buku Catatan</label>
                     <div class="grid grid-cols-2 gap-3">
                         <label class="cursor-pointer border border-slate-200 rounded-xl p-3 flex flex-col items-center gap-2 transition-all has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50/50">
-                            <input type="radio" name="account" value="tabungan" class="hidden" checked>
+                            <input type="radio" name="account" value="tabungan" class="hidden" checked onchange="updateFormUI()">
                             <i class="ph ph-piggy-bank text-xl text-blue-500"></i>
                             <span class="text-sm font-medium text-slate-700">Tabungan</span>
                         </label>
                         <label class="cursor-pointer border border-slate-200 rounded-xl p-3 flex flex-col items-center gap-2 transition-all has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-50/50">
-                            <input type="radio" name="account" value="keperluan" class="hidden">
+                            <input type="radio" name="account" value="keperluan" class="hidden" onchange="updateFormUI()">
                             <i class="ph ph-wallet text-xl text-emerald-500"></i>
                             <span class="text-sm font-medium text-slate-700">Sehari-hari</span>
                         </label>
