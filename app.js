@@ -51,7 +51,6 @@ let state = {
         name: "Pengguna",
         budgetLimit: 300000,
         budgetStartDate: "", // Will be "YYYY-MM"
-        biometricId: "",      // Stored in Firestore
         isLoggedIn: false
     },
     detail: {
@@ -140,8 +139,8 @@ function checkAuth() {
 
 window.tryBiometricLogin = async function() {
     try {
-        // 1. Check if we have a registered credential ID in our synced state
-        const credentialId = state.user.biometricId;
+        // 1. Check if we have a registered credential ID locally
+        const credentialId = localStorage.getItem('dompetku_biometric_id');
         
         if (!credentialId) {
             const wantRegister = confirm("Biometrik belum didaftarkan di perangkat ini.\n\nIngin mendaftarkan sidik jari/wajah Anda sekarang?\n(Anda harus login manual sekali untuk ini)");
@@ -213,11 +212,10 @@ window.registerBiometric = async function() {
         const credential = await navigator.credentials.create(options);
         const idBase64 = btoa(String.fromCharCode(...new Uint8Array(credential.rawId)));
         
-        // Save to state and Firebase (Removing localStorage)
-        state.user.biometricId = idBase64;
-        await saveUserSettings();
+        // Save to localStorage (Local to this device)
+        localStorage.setItem('dompetku_biometric_id', idBase64);
         
-        alert("BERHASIL! Biometrik Anda sudah terdaftar di Cloud. Sekarang Anda bisa masuk menggunakan sidik jari.");
+        alert("BERHASIL! Biometrik Anda sudah terdaftar di perangkat ini. Sekarang Anda bisa masuk menggunakan sidik jari/wajah.");
     } catch (err) {
         console.error("Biometric Registration failed:", err);
         alert("Gagal mendaftarkan biometrik: " + err.message + "\n\nPastikan perangkat mendukung dan Anda menggunakan HTTPS.");
@@ -273,7 +271,6 @@ function setupFirestoreListeners() {
                 state.user.name = data.name || "Pengguna";
                 state.user.budgetLimit = data.budgetLimit || 300000;
                 state.user.budgetStartDate = data.budgetStartDate || "";
-                state.user.biometricId = data.biometricId || "";
                 state.settings.isBalanceVisible = data.isBalanceVisible ?? true;
                 
                 // Initialize start date if missing
@@ -343,7 +340,6 @@ async function saveUserSettings() {
             name: state.user.name,
             budgetLimit: state.user.budgetLimit,
             budgetStartDate: state.user.budgetStartDate,
-            biometricId: state.user.biometricId,
             isBalanceVisible: state.settings.isBalanceVisible
         });
     } catch (e) {
@@ -945,16 +941,16 @@ window.resetAllData = async function() {
         });
         await batch.commit();
 
-        // 2. Reset user settings to defaults (This clears biometricId in Firestore)
+        // 2. Reset user settings to defaults
         await setDoc(doc(db, COLLECTIONS.USER, "current_user"), {
             name: "Pengguna",
             budgetLimit: 300000,
             budgetStartDate: "",
-            biometricId: "",
             isBalanceVisible: true
         });
 
-        // 3. Clear local session flag (state will be reset on reload anyway)
+        // 3. Clear local session flag and biometric data
+        localStorage.removeItem('dompetku_biometric_id');
         state.user.isLoggedIn = false;
 
         // Show Success Alert before reload
