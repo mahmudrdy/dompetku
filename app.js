@@ -299,39 +299,67 @@ function calculateBalances() {
     let expensesTabungan = 0;
     let expensesKeperluan = 0;
 
+    // Cari tanggal transaksi tertua di 'keperluan' untuk memastikan jatah dihitung sejak awal ada data
+    let earliestKeperluanDate = new Date();
+    let hasKeperluanTx = false;
+
     state.transactions.forEach(tx => {
+        const amount = Number(tx.amount) || 0;
+        
         if (tx.type === 'income') {
-            totalIncome += tx.amount;
-            // Respect income added specifically to "Sehari-hari"
-            if (tx.account === 'keperluan') incomeKeperluan += tx.amount;
+            totalIncome += amount;
+            if (tx.account === 'keperluan') incomeKeperluan += amount;
         } else {
             if (tx.account === 'tabungan') {
-                expensesTabungan += tx.amount;
+                expensesTabungan += amount;
             } else {
-                expensesKeperluan += tx.amount;
+                expensesKeperluan += amount;
+                
+                // Track tanggal tertua untuk buku Sehari-hari
+                const txDate = new Date(tx.date);
+                if (txDate < earliestKeperluanDate) {
+                    earliestKeperluanDate = txDate;
+                    hasKeperluanTx = true;
+                }
             }
         }
     });
     
-    // Calculate how many months have passed since start date
     let monthsPassed = 1;
     if (state.user.budgetStartDate) {
-        const start = new Date(state.user.budgetStartDate + "-01");
+        let start = new Date(state.user.budgetStartDate + "-01");
+        
+        // Jika ada transaksi sebelum budgetStartDate, gunakan bulan transaksi tertua
+        if (hasKeperluanTx) {
+            const startYearMonth = start.getFullYear() * 12 + start.getMonth();
+            const txYearMonth = earliestKeperluanDate.getFullYear() * 12 + earliestKeperluanDate.getMonth();
+            
+            if (txYearMonth < startYearMonth) {
+                // Gunakan bulan transaksi tertua sebagai awal perhitungan jatah
+                start = new Date(earliestKeperluanDate.getFullYear(), earliestKeperluanDate.getMonth(), 1);
+            }
+        }
+
         const now = new Date();
-        monthsPassed = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth()) + 1;
+        const yearDiff = now.getFullYear() - start.getFullYear();
+        const monthDiff = now.getMonth() - start.getMonth();
+        monthsPassed = Math.max(1, (yearDiff * 12) + monthDiff + 1);
     }
     
-    // Budget priority: Fund "Sehari-hari" first
-    // We target the cumulative budget limit OR the specific income added (whichever is higher)
-    const budgetNeeded = monthsPassed * state.user.budgetLimit;
-    const targetKeperluan = Math.max(budgetNeeded, incomeKeperluan);
+    const budgetLimit = Number(state.user.budgetLimit) || 0;
+    const budgetNeeded = monthsPassed * budgetLimit;
     
-    const allocatedToKeperluan = Math.min(totalIncome, targetKeperluan);
+    // Jatah (Quota) Bulanan dijamin masuk 100% (Tanpa batas Math.min dengan totalIncome)
+    // Ini agar saat ganti bulan, saldo Sehari-hari langsung bertambah meskipun pemasukan belum dicatat.
+    const allocatedToKeperluan = Math.max(budgetNeeded, incomeKeperluan);
+    
+    // Sisa dana untuk Tabungan (bisa minus jika jatah harian melebihi total uang yang ada)
     const remainingForTabungan = totalIncome - allocatedToKeperluan;
 
-    // Final Balances = Allocation - Expenses
     state.balances.keperluan = allocatedToKeperluan - expensesKeperluan;
     state.balances.tabungan = remainingForTabungan - expensesTabungan;
+
+    console.log(`Dompetku: Perhitungan Selesai [Jatah: ${monthsPassed} bln, Total Jatah: ${allocatedToKeperluan}, Pengeluaran: ${expensesKeperluan}]`);
 }
 
 async function saveUserSettings() {
@@ -444,27 +472,21 @@ window.closeModal = function() {
 };
 
 window.updateFormUI = function() {
-    const account = document.querySelector('input[name="account"]:checked').value;
+    // Aktifkan semua pilihan (Pemasukan/Pengeluaran bisa untuk semua akun)
     const typeIncomeRadio = document.querySelector('input[name="type"][value="income"]');
-    const typeExpenseRadio = document.querySelector('input[name="type"][value="expense"]');
-    
-    if (account === 'keperluan') {
-        if (typeIncomeRadio.checked) {
-            typeExpenseRadio.checked = true;
-        }
-        typeIncomeRadio.disabled = true;
-        typeIncomeRadio.parentElement.classList.add('opacity-40', 'pointer-events-none');
-    } else {
+    if (typeIncomeRadio) {
         typeIncomeRadio.disabled = false;
         typeIncomeRadio.parentElement.classList.remove('opacity-40', 'pointer-events-none');
     }
 
     const type = document.querySelector('input[name="type"]:checked').value;
     const submitBtn = document.getElementById('submitBtn');
-    submitBtn.textContent = type === 'income' ? 'Simpan Pemasukan' : 'Simpan Pengeluaran';
-    submitBtn.className = type === 'income' 
-        ? 'w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold shadow-lg shadow-blue-500/30 transition-all cursor-pointer'
-        : 'w-full py-3.5 bg-red-600 hover:bg-red-700 text-white rounded-xl font-semibold shadow-lg shadow-red-500/30 transition-all cursor-pointer';
+    if (submitBtn) {
+        submitBtn.textContent = type === 'income' ? 'Simpan Pemasukan' : 'Simpan Pengeluaran';
+        submitBtn.className = type === 'income' 
+            ? 'w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold shadow-lg shadow-blue-500/30 transition-all cursor-pointer'
+            : 'w-full py-3.5 bg-red-600 hover:bg-red-700 text-white rounded-xl font-semibold shadow-lg shadow-red-500/30 transition-all cursor-pointer';
+    }
 };
 
 function setupEventListeners() {
@@ -868,11 +890,11 @@ function updateStats() {
     const cmExpenses = currentMonthTxs.filter(t => t.type === 'expense');
     const cmIncomes = currentMonthTxs.filter(t => t.type === 'income');
 
-    const cmTotalIncome = cmIncomes.reduce((sum, t) => sum + t.amount, 0);
-    const cmTotalExpense = cmExpenses.reduce((sum, t) => sum + t.amount, 0);
+    const cmTotalIncome = cmIncomes.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+    const cmTotalExpense = cmExpenses.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
 
-    const cmExpenseKeperluan = cmExpenses.filter(t => t.account === 'keperluan').reduce((sum, t) => sum + t.amount, 0);
-    const cmExpenseTabungan = cmExpenses.filter(t => t.account === 'tabungan').reduce((sum, t) => sum + t.amount, 0);
+    const cmExpenseKeperluan = cmExpenses.filter(t => t.account === 'keperluan').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+    const cmExpenseTabungan = cmExpenses.filter(t => t.account === 'tabungan').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
 
     const budget = state.user.budgetLimit;
     const percent = budget > 0 ? Math.min(Math.round((cmExpenseKeperluan / budget) * 100), 100) : 0;
